@@ -181,8 +181,8 @@ constexpr OutIter parser_t::decode_json_string(Iter beg, Iter end, OutIter outpu
 
 inline constexpr bool parser_t::write(const std::string_view &text) {
     eof = text.empty();
-    text_begin = text.begin();
-    text_end = text.end();
+    text_begin = text.data();
+    text_end = text.data()+text.size();
     if (parse_error || parse()) return true;
     while (text_begin != text_end) {
         if (parse_error || parse()) return true;

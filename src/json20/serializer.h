@@ -1,6 +1,7 @@
 #pragma once
-#include <vector>
 #include "value.h"
+#include <vector>
+#include <iterator>
 
 namespace json20 {
 
@@ -171,7 +172,7 @@ constexpr void serializer_t::encode_str(std::string_view text, Iter iter) {
     };
 
     auto hex = [](int val) {
-        return val <= 10?('0'+val):('A'+val-10);
+        return static_cast<char>(val <= 10?('0'+val):('A'+val-10));
     };
 
     for (char c : text) {
@@ -278,9 +279,9 @@ inline constexpr void serializer_t::render(const double & val) {
         _buffer.push_back('.');
         while (fracp >= min_frac_to_render && fracp <= (1.0-min_frac_to_render)) {
             fracp *= 10;
-            unsigned int v = static_cast<int>(fracp);
-            fracp -= v;
-            _buffer.push_back(v + '0');
+            unsigned int vv = static_cast<int>(fracp);
+            fracp -= vv;
+            _buffer.push_back(static_cast<char>(vv) + '0');
         }
     }
     if (exponent) {

@@ -6,6 +6,7 @@
 #include <tuple>
 #include <algorithm>
 #include <memory>
+#include <string>
 
 namespace json20 {
 
@@ -301,16 +302,16 @@ public:
         constexpr t_iterator_t(const value_t *pos):is_kv(false),pos_val(pos) {}
         constexpr t_iterator_t &operator++();
         constexpr t_iterator_t &operator--();
-        constexpr t_iterator_t &operator+=(int n);
-        constexpr t_iterator_t &operator-=(int n);
+        constexpr t_iterator_t &operator+=(difference_type n);
+        constexpr t_iterator_t &operator-=(difference_type n);
         constexpr t_iterator_t operator++(int) {
             t_iterator_t tmp = *this; operator++(); return tmp;
         }
         constexpr t_iterator_t operator--(int) {
             t_iterator_t tmp = *this; operator--(); return tmp;
         }
-        constexpr t_iterator_t operator+(int n) const;
-        constexpr t_iterator_t operator-(int n) const;
+        constexpr t_iterator_t operator+(difference_type n) const;
+        constexpr t_iterator_t operator-(difference_type n) const;
         constexpr std::ptrdiff_t operator-(const t_iterator_t &other) const;
         constexpr const value_t &operator *() const ;
         constexpr std::string_view key() const;
@@ -662,23 +663,23 @@ inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::opera
     return *this;
 }
 template<int step>
-inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator+=(int n) {
+inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator+=(difference_type n) {
     if (is_kv) pos_kv+=n*step; else pos_val+=n*step;
     return *this;
 }
 template<int step>
-inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator-=(int n){
+inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator-=(difference_type n){
     if (is_kv) pos_kv-=n*step; else pos_val-=n*step;
     return *this;
 }
 
 template<int step>
-inline constexpr value_t::t_iterator_t<step> value_t::t_iterator_t<step>::operator+(int n) const {
+inline constexpr value_t::t_iterator_t<step> value_t::t_iterator_t<step>::operator+(difference_type n) const {
     if (is_kv) return t_iterator_t<step>(pos_kv + n*step);
     else return t_iterator_t<step>(pos_val + n*step);
 }
 template<int step>
-inline constexpr value_t::t_iterator_t<step> value_t::t_iterator_t<step>::operator-(int n) const {
+inline constexpr value_t::t_iterator_t<step> value_t::t_iterator_t<step>::operator-(difference_type n) const {
     if (is_kv) return t_iterator_t<step>(pos_kv - n*step);
     else return t_iterator_t<step>(pos_val - n*step);
 }
@@ -849,7 +850,7 @@ protected:
 };
 
 //clang complains for undefined function
-template value_t list_item_t::build_item<std::span<value_t const> >(std::span<value_t const> const*);
+template value_t list_item_t::build_item<std::span<value_t const> >(std::span<value_t const> const*) noexcept;
 //clang complains for undefined function
 template std::string json20::value_t::as<std::string>() const;
 

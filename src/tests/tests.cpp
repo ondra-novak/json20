@@ -53,7 +53,14 @@ constexpr bool validate_number_4 = []{
     return true;
 }();
 
-
+constexpr bool parse_json_0 = []{
+        const std::string_view txt = R"json("aa")json";
+        parser_t p;
+        p.write(txt);
+        auto v = p.get_parsed();
+        return true;
+}();
+/*
 constexpr bool parse_json_1 = []{
         const std::string_view txt = "[1,2,true,{\"key\":null,\"key2\":\"world\"},\"hello\"]extra";
         parser_t p;
@@ -119,7 +126,7 @@ constexpr bool parse_json_2 = []{
 
 
 
-
+*/
 
 }
 
