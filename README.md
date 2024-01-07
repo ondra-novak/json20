@@ -36,13 +36,13 @@ for (const auto &x: object) {
 ```
 
 
-## json_container_t 
+## value_container_t 
 
 It is storage fo constexpr constructed JSON-like structure
 
 ```
-json_container_t<Elements> c1;
-json_container_t<Elements, StringBuffer> c2;
+value_container_t<Elements> c1;
+value_container_t<Elements, StringBuffer> c2;
 ```
 
 * `Elements` - count of elements, because the c++20 is unable to calculate this value, you need to guess it the compiler checks, whether it is correct guess. It is also able to show the correct value.
