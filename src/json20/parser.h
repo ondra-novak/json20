@@ -296,16 +296,12 @@ inline constexpr bool parser_t::detect_value() {
 
 
 
-inline constexpr bool parser_t::parse_string(state_t &action) {
+inline constexpr bool parser_t::parse_string(state_t &) {
     if (eof) return set_parse_error();
     decode_json_string(_buffer.begin(), _buffer.end(), std::back_inserter(_decoded_buffer));
     std::string_view dstr(_decoded_buffer.begin(), _decoded_buffer.end());
     if (std::is_constant_evaluated()) {
-        if (text_begin - text_parse_begin == _decoded_buffer.size()) {
-            _result = value_t(std::string_view({text_parse_begin, text_begin}));
-        } else {
-            _result = alloc_str(dstr, false);
-        }
+        _result = alloc_str(dstr, false);
     } else {
         _result = value_t(dstr);
     }
@@ -315,13 +311,12 @@ inline constexpr bool parser_t::parse_string(state_t &action) {
     return true;
 }
 
-inline constexpr bool parser_t::parse_number(state_t &action) {
+inline constexpr bool parser_t::parse_number(state_t &) {
     //todo - validate number
     number_string_t nstr({_buffer.begin(), _buffer.end()});
     if (!nstr.validate()) return set_parse_error();
     if (std::is_constant_evaluated()) {
-        if (nstr.is_floating()) _result = value_t(nstr.parse());
-        else _result = value_t(nstr.parse_int<long>());
+        _result = alloc_str(nstr, true);
     } else {
         _result = value_t(nstr);
     }
@@ -345,7 +340,7 @@ inline constexpr bool parser_t::parse_kw(state_t &action) {
     return false;
 }
 
-inline constexpr bool parser_t::parse_array_begin(state_t &action) {
+inline constexpr bool parser_t::parse_array_begin(state_t &) {
     if (eof) return set_parse_error();
     if (skip_ws()) {
         if (*text_begin == ']') {
@@ -376,7 +371,7 @@ inline constexpr bool parser_t::parse_array(state_t &action) {
     return false;
 }
 
-inline constexpr bool parser_t::parse_object_begin(state_t &action) {
+inline constexpr bool parser_t::parse_object_begin(state_t &) {
     if (eof) return set_parse_error();
     if (skip_ws()) {
         if (*text_begin == '}') {

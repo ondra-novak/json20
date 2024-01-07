@@ -1,5 +1,5 @@
-#include "json20/serializer.h"
-#include "json20/parser.h"
+#include "../json20/serializer.h"
+#include "../json20/parser.h"
 #include <cstdint>
 
 namespace json20 {
@@ -87,16 +87,42 @@ constexpr std::string_view test_json = R"json(
        [7,8,9]],
    "stav":true,
    "stav2":false,
-   "nullval":null
+   "nullval":null,
+   "text_contains_quotes":"I say \"hello world\"!"
 }
 )json";
 
 
 constexpr auto test_json_parsed = []{
-        return json20::value_container_t<29>(value_t::parse(test_json));
+        return json20::value_container_t<31,115>(value_t::parse(test_json));
+}();
+
+
+constexpr bool parse_json_2 = []{
+        const value_t &v = test_json_parsed;
+        check(v["abc"].as<int>() == 123);
+        check(v["xyz"].as<int>() == 42);
+        check(v["pole"].size() == 3);
+        check(v["2dpole"].type() == type_t::array);
+        check(v["stav"].as<int>() == 1);
+        check(v["stav"].as<std::string_view>() == "true");
+        check(v["nullval"] == nullptr);
+        check(v["2dpole"].type() == type_t::array);
+        check(v["2dpole"][1][1].as<int>() == 5);
+        check(!v["2dpole"][1][7]);
+        check(!v["2dpole"]["xyz"]);
+        check(!v["neexistuje"]);
+        check(v["text_contains_quotes"].as<std::string_view>()
+             == "I say \"hello world\"!");
+        return true;
 }();
 
 
 
 
+
 }
+
+
+
+

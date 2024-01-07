@@ -15,6 +15,20 @@ struct special_conversion_t {
     constexpr std::optional<To> operator()(const From &) const {return std::nullopt;}
 };
 
+template<number_t T>
+struct special_conversion_t<bool, T> {
+    constexpr std::optional<T> operator()(const bool &b) const {
+        return T(b?1:0);
+    }
+};
+
+template<number_t T>
+struct special_conversion_t<T, bool> {
+    constexpr std::optional<bool> operator()(const T &b) const {
+        return !(!b);
+    }
+};
+
 
 template<null_or_undefined_t T>
 struct special_conversion_t<T, double> {

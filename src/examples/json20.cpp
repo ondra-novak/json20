@@ -1,6 +1,6 @@
-#include "json20/value.h"
-#include "json20/serializer.h"
-#include "json20/parser.h"
+#include "../json20/value.h"
+#include "../json20/serializer.h"
+#include "../json20/parser.h"
 
 #include <iostream>
 
@@ -82,6 +82,7 @@ constexpr auto obj = []{return json20::value_container_t<30>({
     {"flags",{{1}}}
 });}();
 
+
 constexpr std::string_view test_json = R"json(
 {
    "abc":123,
@@ -93,13 +94,14 @@ constexpr std::string_view test_json = R"json(
        [7,8,9]],
    "stav":true,
    "stav2":false,
-   "nullval":null
+   "nullval":null,
+   "text_contains_quotes":"I say \"hello world\"!"
 }
 )json";
 
 
 constexpr auto test_json_parsed = []{
-        return json20::value_container_t<29>(json20::value_t::parse(test_json));
+        return json20::value_container_t<31,115>(json20::value_t::parse(test_json));
 }();
 
 
@@ -166,6 +168,7 @@ int main() {
     }();
 
     auto zzz = json20::value_t::parse(test_json);
+    int zzy = test_json_parsed["abc"].as<int>();
 
 	return 0;
 }
