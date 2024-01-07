@@ -764,7 +764,7 @@ public:
         }
         pos = 0;
         pos = expand_strings(pos);
-        if (pos != StringBytes) {
+        if (pos+16 < StringBytes) {
             char string_buffer_too_large[1];
             std::ignore = string_buffer_too_large[pos];
 

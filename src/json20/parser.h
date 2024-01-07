@@ -316,7 +316,11 @@ inline constexpr bool parser_t::parse_number(state_t &) {
     number_string_t nstr({_buffer.begin(), _buffer.end()});
     if (!nstr.validate()) return set_parse_error();
     if (std::is_constant_evaluated()) {
-        _result = alloc_str(nstr, true);
+        if (nstr.is_floating()) {
+            _result = alloc_str(nstr, true);
+        } else {
+            _result = value_t(static_cast<long>(nstr));
+        }
     } else {
         _result = value_t(nstr);
     }

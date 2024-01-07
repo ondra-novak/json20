@@ -101,7 +101,7 @@ constexpr std::string_view test_json = R"json(
 
 
 constexpr auto test_json_parsed = []{
-        return json20::value_container_t<31,115>(json20::value_t::parse(test_json));
+        return json20::value_container_t<31,87>(json20::value_t::parse(test_json));
 }();
 
 
