@@ -5,6 +5,7 @@
 #include <span>
 #include <tuple>
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -342,6 +343,7 @@ public:
     constexpr iterator_t begin() const;
     constexpr iterator_t end() const;
 
+
 protected:
 
     static constexpr void sort_object(shared_array_t<key_value_t> *obj);
@@ -397,7 +399,8 @@ protected:
             double d;
             bool b;
         };
-   };
+     };
+
 
     union {
         LocalStr _str;
@@ -856,4 +859,5 @@ template std::string json20::value_t::as<std::string>() const;
 
 template class value_t::t_iterator_t<1>;
 template class value_t::t_iterator_t<2>;;
+
 }

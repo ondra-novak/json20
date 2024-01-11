@@ -1,12 +1,12 @@
 #pragma once
-#include "value.h"
+#include "serialize_common.h"
 #include <vector>
 #include <iterator>
 
 namespace json20 {
 
 
-
+template<format_t format  = format_t::text>
 class serializer_t {
 public:
 
@@ -38,35 +38,61 @@ protected:
     constexpr void render(const bool &);
     template<signed_integer_number_t T>
     constexpr void render(const T &val) {
-        if (val < 0) {
-            _buffer.push_back('-');
-            render(static_cast<std::make_unsigned_t<T> >(-val));
-        } else{
-            render(static_cast<std::make_unsigned_t<T> >(val));
+        if constexpr(format == format_t::text) {
+            if (val < 0) {
+                _buffer.push_back('-');
+                render(static_cast<std::make_unsigned_t<T> >(-val));
+            } else{
+                render(static_cast<std::make_unsigned_t<T> >(val));
+            }
+        } else {
+            if (val < 0) {
+                render_tag_and_number(bin_element_t::neg_number, -val);
+            } else {
+                render_tag_and_number(bin_element_t::pos_number, val);
+            }
         }
     }
     template<unsigned_integer_number_t T>
     constexpr void render(const T &val) {
-        if (val == 0) {
-            _buffer.push_back('0');
-            return;
+        if constexpr(format == format_t::text) {
+            if (val == 0) {
+                _buffer.push_back('0');
+                return;
+            }
+            T v = val;
+             char buff[100];
+             auto iter = std::end(buff);
+             while (v) {
+                 --iter;
+                 *iter = ((v % 10) + '0');
+                 v /= 10;
+             }
+             std::copy(iter, std::end(buff), std::back_inserter(_buffer));
+        } else {
+            render_tag_and_number(bin_element_t::pos_number, val);
         }
-        T v = val;
-         char buff[100];
-         auto iter = std::end(buff);
-         while (v) {
-             --iter;
-             *iter = ((v % 10) + '0');
-             v /= 10;
-         }
-         std::copy(iter, std::end(buff), std::back_inserter(_buffer));
      }
 
-    constexpr void render(const double &);
+    constexpr void render(const double &v);
 
 
     constexpr void render_key(const std::string_view &key);
     constexpr void render_kw(const std::string_view &kw);
+
+    constexpr void render_tag_and_number(bin_element_t elm, std::uint64_t val) {
+        auto tmp = val;
+        auto cnt = 0;
+        do {
+            ++cnt;
+            tmp>>=8;
+        }while (tmp);
+        _buffer.push_back(encode_tag(elm, cnt-1));
+        for (auto i = cnt; i > 0;) {
+            --i;
+            _buffer.push_back(static_cast<char>((val >> (i * 8)) & 0xFF));
+        }
+    }
 
     enum Type {
         value,
@@ -89,7 +115,8 @@ protected:
 
 
 
-inline constexpr std::string_view serializer_t::read() {
+template<format_t format>
+inline constexpr std::string_view serializer_t<format>::read() {
 
     _buffer.clear();
     if (_stack.empty()) return {};
@@ -114,32 +141,48 @@ inline constexpr std::string_view serializer_t::read() {
 }
 
 
-inline constexpr void serializer_t::render_item(const value_t &item) {
+template<format_t format>
+inline constexpr void serializer_t<format>::render_item(const value_t &item) {
     item.visit([&](const auto &v){
         render(v);
     });
 }
 
-inline constexpr void serializer_t::close_item() {
-    do {
-        auto &top = _stack.back();
-        if (top.iter == top.end) {
-            switch (top.type) {
-                default: break;
-                case Type::array: _buffer.push_back(']');break;
-                case Type::object: _buffer.push_back('}');break;
+template<format_t format>
+inline constexpr void serializer_t<format>::close_item() {
+    if constexpr(format == format_t::text) {
+        do {
+            auto &top = _stack.back();
+            if (top.iter == top.end) {
+                switch (top.type) {
+                    default: break;
+                    case Type::array: _buffer.push_back(']');break;
+                    case Type::object: _buffer.push_back('}');break;
+                }
+                _stack.pop_back();
+                if (_stack.empty()) return;
+            } else {
+                _buffer.push_back(',');
+                return;
             }
+        } while (true);
+    } else {
+        do {
+            auto &top = _stack.back();
+            if (top.iter != top.end) return;
             _stack.pop_back();
-            if (_stack.empty()) return;
-        } else {
-            _buffer.push_back(',');
-            return;
-        }
-    } while (true);
+        } while (!_stack.empty());
+
+    }
 }
 
-inline constexpr void serializer_t::render(const array_t &arr) {
-    _buffer.push_back('[');
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const array_t &arr) {
+    if constexpr(format == format_t::text) {
+        _buffer.push_back('[');
+    } else {
+        render_tag_and_number(bin_element_t::array, arr.size());
+    }
     _stack.push_back({
         Type::array,
         value_t::iterator_t(arr.data()),
@@ -147,8 +190,13 @@ inline constexpr void serializer_t::render(const array_t &arr) {
     });
 }
 
-inline constexpr void serializer_t::render(const object_t &obj) {
-    _buffer.push_back('{');
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const object_t &obj) {
+    if constexpr(format == format_t::text) {
+        _buffer.push_back('{');
+    } else {
+        render_tag_and_number(bin_element_t::object, obj.size());
+    }
     _stack.push_back({
         Type::object,
         value_t::iterator_t(obj.data()),
@@ -158,13 +206,21 @@ inline constexpr void serializer_t::render(const object_t &obj) {
 
 
 
-inline constexpr void serializer_t::render_key(const std::string_view &key) {
-    render(key);
-    _buffer.push_back(':');
+template<format_t format>
+inline constexpr void serializer_t<format>::render_key(const std::string_view &key) {
+    if constexpr(format == format_t::text) {
+        render(key);
+        _buffer.push_back(':');
+    } else {
+        render_tag_and_number(bin_element_t::string, key.size());
+        std::copy(key.begin(), key.end(), std::back_inserter(_buffer));
+    }
+
 }
 
+template<format_t format>
 template<typename Iter>
-constexpr void serializer_t::encode_str(std::string_view text, Iter iter) {
+constexpr void serializer_t<format>::encode_str(std::string_view text, Iter iter) {
 
     auto escape = [&](char c) {
         *iter = '\\'; ++iter;
@@ -202,28 +258,55 @@ constexpr void serializer_t::encode_str(std::string_view text, Iter iter) {
 }
 
 
-
-inline constexpr void serializer_t::render(const std::string_view &str) {
-    _buffer.push_back('"');
-    encode_str(str, std::back_inserter(_buffer));
-    _buffer.push_back('"');
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const std::string_view &str) {
+    if constexpr(format == format_t::text) {
+        _buffer.push_back('"');
+        encode_str(str, std::back_inserter(_buffer));
+        _buffer.push_back('"');
+    } else {
+        render_tag_and_number(bin_element_t::string, str.size());
+        std::copy(str.begin(), str.end(), std::back_inserter(_buffer));
+    }
 }
 
-inline constexpr void serializer_t::render(const number_string_t &str) {
-    encode_str(str, std::back_inserter(_buffer));
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const number_string_t &str) {
+    if constexpr(format == format_t::text) {
+        encode_str(str, std::back_inserter(_buffer));
+    } else {
+        render_tag_and_number(bin_element_t::num_string, str.size());
+        std::copy(str.begin(), str.end(), std::back_inserter(_buffer));
+    }
 }
-inline constexpr void serializer_t::render_kw(const std::string_view &kw) {
+template<format_t format>
+inline constexpr void serializer_t<format>::render_kw(const std::string_view &kw) {
     std::copy(kw.begin(), kw.end(), std::back_inserter(_buffer));
 }
 
-inline constexpr void serializer_t::render(const undefined_t &) {
-    render_kw(value_t::str_null);
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const undefined_t &) {
+    if constexpr(format == format_t::text) {
+        render_kw(value_t::str_null);
+    } else {
+        _buffer.push_back(static_cast<char>(bin_element_t::undefined));
+    }
 }
-inline constexpr void serializer_t::render(const std::nullptr_t &) {
-    render_kw(value_t::str_null);
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const std::nullptr_t &) {
+    if constexpr(format == format_t::text) {
+        render_kw(value_t::str_null);
+    } else {
+        _buffer.push_back(static_cast<char>(bin_element_t::null));
+    }
 }
-inline constexpr void serializer_t::render(const bool &b) {
-    render_kw(b?value_t::str_true:value_t::str_false);
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const bool &b) {
+    if constexpr(format == format_t::text) {
+        render_kw(b?value_t::str_true:value_t::str_false);
+    } else {
+        _buffer.push_back(encode_tag(bin_element_t::boolean, b?1:0));
+    }
 }
 inline std::string value_t::stringify() const {
     std::string res;
@@ -233,64 +316,76 @@ inline std::string value_t::stringify() const {
     return res;
 }
 
-inline constexpr void serializer_t::render(const double & val) {
+template<format_t format>
+inline constexpr void serializer_t<format>::render(const double & val) {
 
-    constexpr double min_frac_to_render = 0.0001;
+    if constexpr(format == format_t::text) {
+        constexpr double min_frac_to_render = 0.0001;
 
-    if (is_neg_infinity(val)) {
-        render(number_string_t::minus_infinity);
-        return;
-    }
-    if (is_pos_infinity(val)) {
-        render(number_string_t::plus_infinity);
-        return;
-    }
-    if (is_nan(val)) {
-        render(nullptr);
-        return;
-    }
-
-    double v;
-    if (val < 0) {
-        _buffer.push_back('-');
-        v =  -val;
-    } else {
-        v = val;
-    }
-
-
-    int exponent = static_cast<int>(number_string_t::get_exponent(v));
-    if (exponent > 8 || exponent < -2) {
-        v = v / number_string_t::pow10(exponent);
-    } else {
-        exponent = 0;
-    }
-
-    v+=std::numeric_limits<double>::epsilon();
-
-    unsigned long intp = static_cast<unsigned long>(v);
-    double fracp = v - intp;
-    if (fracp >= (1.0 - min_frac_to_render)) {
-        intp++;
-        fracp = 0;
-    }
-    render(intp);
-    if (fracp >= min_frac_to_render) {
-        _buffer.push_back('.');
-        while (fracp >= min_frac_to_render && fracp <= (1.0-min_frac_to_render)) {
-            fracp *= 10;
-            unsigned int vv = static_cast<int>(fracp);
-            fracp -= vv;
-            _buffer.push_back(static_cast<char>(vv) + '0');
+        if (is_neg_infinity(val)) {
+            render(number_string_t::minus_infinity);
+            return;
         }
-    }
-    if (exponent) {
-        _buffer.push_back('e');
-        render(exponent);
+        if (is_pos_infinity(val)) {
+            render(number_string_t::plus_infinity);
+            return;
+        }
+        if (is_nan(val)) {
+            render(nullptr);
+            return;
+        }
+
+        double v;
+        if (val < 0) {
+            _buffer.push_back('-');
+            v =  -val;
+        } else {
+            v = val;
+        }
+
+
+        int exponent = static_cast<int>(number_string_t::get_exponent(v));
+        if (exponent > 8 || exponent < -2) {
+            v = v / number_string_t::pow10(exponent);
+        } else {
+            exponent = 0;
+        }
+
+        v+=std::numeric_limits<double>::epsilon();
+
+        unsigned long intp = static_cast<unsigned long>(v);
+        double fracp = v - intp;
+        if (fracp >= (1.0 - min_frac_to_render)) {
+            intp++;
+            fracp = 0;
+        }
+        render(intp);
+        if (fracp >= min_frac_to_render) {
+            _buffer.push_back('.');
+            while (fracp >= min_frac_to_render && fracp <= (1.0-min_frac_to_render)) {
+                fracp *= 10;
+                unsigned int vv = static_cast<int>(fracp);
+                fracp -= vv;
+                _buffer.push_back(static_cast<char>(vv) + '0');
+            }
+        }
+        if (exponent) {
+            _buffer.push_back('e');
+            render(exponent);
+        }
+    } else {
+        _buffer.push_back(encode_tag(bin_element_t::num_double, 0));
+        std::uint64_t binnum = std::bit_cast<std::uint64_t>(val);
+        for (int i = 8; i > 0;) {
+            --i;
+            _buffer.push_back(static_cast<char>((binnum >> (i*8)) & 0xFF));
+        }
     }
 
 }
 
+template class serializer_t<format_t::binary>;
+template class serializer_t<format_t::text>;
 
 
 }

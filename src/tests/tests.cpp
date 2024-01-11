@@ -60,7 +60,7 @@ constexpr bool parse_json_0 = []{
         auto v = p.get_parsed();
         return true;
 }();
-/*
+
 constexpr bool parse_json_1 = []{
         const std::string_view txt = "[1,2,true,{\"key\":null,\"key2\":\"world\"},\"hello\"]extra";
         parser_t p;
@@ -100,10 +100,26 @@ constexpr std::string_view test_json = R"json(
 )json";
 
 
+
 constexpr auto test_json_parsed = []{
         return json20::value_container_t<31,87>(value_t::parse(test_json));
 }();
 
+
+constexpr auto test_json_bin = []{
+        auto json = value_t::parse(test_json);
+        serializer_t<format_t::binary> sr(json);
+        parser_t<format_t::binary> pr;
+        std::string_view txt = sr.read();
+        while (!txt.empty()) {
+            if (pr.write(txt)) break;
+            txt = sr.read();
+        }
+        check(json ==  pr.get_parsed());
+        return true;
+}();
+
+/*
 
 constexpr bool parse_json_2 = []{
         const value_t &v = test_json_parsed;
@@ -124,9 +140,9 @@ constexpr bool parse_json_2 = []{
         return true;
 }();
 
-
-
 */
+
+
 
 }
 

@@ -3,6 +3,7 @@
 #include "../json20/parser.h"
 
 #include <iostream>
+#include <iomanip>
 
 namespace json20 {
 
@@ -105,7 +106,56 @@ constexpr auto test_json_parsed = []{
 }();
 
 
+constexpr auto test_json_bin = []{
+        auto json = json20::value_t::parse(test_json);
+        json20::serializer_t<json20::format_t::binary> sr(json);
+        json20::parser_t<json20::format_t::binary> pr;
+        std::string_view txt = sr.read();
+        while (!txt.empty()) {
+            if (pr.write(txt)) break;
+            txt = sr.read();
+        }
+        if (pr.is_error()) throw std::runtime_error("error");
+        if (json !=  pr.get_parsed()) {
+            println(json);
+            println(pr.get_parsed());
+            throw std::runtime_error("not_same");
+        }
+        return true;
+
+};
+
+void hexDump(const std::string& input) {
+    std::cout << "Hex dump of the string:" << std::endl;
+
+    for (std::size_t i = 0; i < input.length(); ++i) {
+        if (i % 16 == 0) {
+            if (i != 0)
+                std::cout << std::endl;
+
+            std::cout << std::setw(4) << std::setfill('0') << std::hex << i << ": ";
+        }
+
+        std::cout << std::setw(2) << std::setfill('0') << std::hex << static_cast<int>(static_cast<unsigned char>(input[i])) << ' ';
+    }
+
+    std::cout << std::endl;
+}
+
+std::string to_binary(json20::value_t v) {
+    std::string res;
+    json20::serializer_t<json20::format_t::binary> sr(v);
+    for (std::string_view str; !(str = sr.read()).empty();) {
+        res.append(str);
+    }
+
+    return res;
+}
+
+
 int main() {
+
+    test_json_bin();
 
     println(objtst);
 
@@ -169,6 +219,8 @@ int main() {
 
     auto zzz = json20::value_t::parse(test_json);
     int zzy = test_json_parsed["abc"].as<int>();
+
+    hexDump(to_binary(obj));
 
 	return 0;
 }
