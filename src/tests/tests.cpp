@@ -102,12 +102,12 @@ constexpr std::string_view test_json = R"json(
 
 
 constexpr auto test_json_parsed = []{
-        return json20::value_container_t<31,87>(value_t::parse(test_json));
+        return json20::value_container_t<31,87>(value_t::from_json(test_json));
 }();
 
 
 constexpr auto test_json_bin = []{
-        auto json = value_t::parse(test_json);
+        auto json = value_t::from_json(test_json);
         serializer_t<format_t::binary> sr(json);
         parser_t<format_t::binary> pr;
         std::string_view txt = sr.read();
@@ -118,6 +118,42 @@ constexpr auto test_json_bin = []{
         check(json ==  pr.get_parsed());
         return true;
 }();
+
+
+constexpr bool test_base64_encode(std::string_view binary, std::string_view result) {
+    std::vector<char> buff;
+    base64.encode(binary.begin(), binary.end(), std::back_inserter(buff));
+    return result == std::string_view(buff.begin(), buff.end());
+}
+
+constexpr bool test_base64_decode(std::string_view text, std::string_view result) {
+    std::vector<char> buff;
+    base64.decode(text.begin(), text.end(), std::back_inserter(buff));
+    return result == std::string_view(buff.begin(), buff.end());
+}
+
+
+constexpr auto test_base64 = []{
+        check(test_base64_encode("test","dGVzdA=="));
+        check(test_base64_encode("1","MQ=="));
+        check(test_base64_encode("~12jio~iuh2JUHBYU[a..,m][2-09šěíáa+é=ě","fjEyamlvfml1aDJKVUhCWVVbYS4uLG1dWzItMDnFocSbw63DoWErw6k9xJs="));
+        check(test_base64_encode("ABC","QUJD"));
+        check(test_base64_decode("MQ==","1"));
+        check(test_base64_decode("QUJD","ABC"));
+        check(test_base64_decode("fjEyamlvfml1aDJKVUhCWVVbYS4uLG1dWzItMDnFocSbw63DoWErw6k9xJs=","~12jio~iuh2JUHBYU[a..,m][2-09šěíáa+é=ě"));
+        check(test_base64_decode("dGVzdA==","test"));
+        check(test_base64_decode("bGlna HQgd29 yay4=","light work."));
+        check(test_base64_decode("b-Gln*aHQ(gd)29yaw==","light work"));
+        check(test_base64_decode("bGlnaHQgd28=","light wo"));
+        return true;
+}();
+
+
+constexpr binary_data example_binary_data("bGlnaHQgd29yay4=");
+constexpr unsigned char example_binary_data_decoded[] = {'l','i','g','h','t',' ','w','o','r','k','.'};
+
+constexpr auto test_binary_data = check(static_cast<binary_string_view_t>(example_binary_data) == binary_string_view_t(example_binary_data_decoded, sizeof(example_binary_data_decoded)));
+
 
 /*
 

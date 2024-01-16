@@ -42,9 +42,10 @@ void print(const value_t &el) {
                 }
             }
             std::cout << "}";
-
+        } else if constexpr(std::is_same_v<T, binary_string_view_t>) {
+            std::cout <<  el.as<std::string>();
         } else {
-            std::cout <<  item ;
+            std::cout <<  item;
         }
     });
 }
@@ -57,10 +58,11 @@ void println(const value_t &el) {
 
 }
 
-constexpr auto objtst = []{return json20::value_container_t<6>({
+constexpr auto objtst = []{return json20::value_container_t<10>({
     {"aaa",111},
     {"bbb",222},
     {"ccc",333},
+    {},
 });}();
 
 constexpr auto obj = []{return json20::value_container_t<30>({
@@ -102,12 +104,12 @@ constexpr std::string_view test_json = R"json(
 
 
 constexpr auto test_json_parsed = []{
-        return json20::value_container_t<31,87>(json20::value_t::parse(test_json));
+        return json20::value_container_t<31,87>(json20::value_t::from_json(test_json));
 }();
 
 
 constexpr auto test_json_bin = []{
-        auto json = json20::value_t::parse(test_json);
+        auto json = json20::value_t::from_json(test_json);
         json20::serializer_t<json20::format_t::binary> sr(json);
         json20::parser_t<json20::format_t::binary> pr;
         std::string_view txt = sr.read();
@@ -152,6 +154,10 @@ std::string to_binary(json20::value_t v) {
     return res;
 }
 
+constexpr json20::binary_data example_binary_data("bGlnaHQgd29yay4=");
+
+
+
 
 int main() {
 
@@ -179,7 +185,7 @@ int main() {
             {"flags",{{1.258, 12.148e52}}}
         };
 
-    json20::print(obj);
+    json20::print({1,2,3,{},4,5,6});
     json20::value_t v = json20::object_t({
             {"123456789ABCDEF",1},
             {"bbb",2}
@@ -196,17 +202,17 @@ int main() {
     std::cout << static_cast<int>(vnum.type()) << std::endl;
     std::cout << static_cast<int>(vnum2.type()) << std::endl;
     std::cout << (vtest == obj) << std::endl;
-    std::cout << test_json_parsed.stringify() << std::endl;
+    std::cout << test_json_parsed.to_json() << std::endl;
     std::cout << obj.to_string() << std::endl;
 
-    std::string ss = vtest.stringify();
+    std::string ss = vtest.to_json();
     json20::parser_t prs;
     for (char c: ss) {
         prs.write(std::string_view(&c,1));
     }
     bool b = prs.write("");
     //print(prs.get_parsed());
-    std::cout << b << ":" << prs.get_parsed().stringify() << std::endl;
+    std::cout << b << ":" << prs.get_parsed().to_json() << std::endl;
 
     bool parse_json_1 = []{
             const std::string_view txt = "[1,2,true,\"hello\"]extra";
@@ -217,10 +223,18 @@ int main() {
             return true;
     }();
 
-    auto zzz = json20::value_t::parse(test_json);
+    auto zzz = json20::value_t::from_json(test_json);
     int zzy = test_json_parsed["abc"].as<int>();
 
+    for (char c: example_binary_data) {
+        std::cout << c;
+    }
+    std::cout << std::endl;
+
     hexDump(to_binary(obj));
+
+
+
 
 	return 0;
 }
