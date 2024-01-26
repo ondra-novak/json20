@@ -33,6 +33,7 @@ protected:
     constexpr void render(const object_t &arr);
     constexpr void render(const std::string_view &str);
     constexpr void render(const number_string_t &str);
+    constexpr void render(const binary_string_view_t &str);
     constexpr void render(const undefined_t &);
     constexpr void render(const std::nullptr_t &);
     constexpr void render(const bool &);
@@ -285,6 +286,18 @@ inline constexpr void serializer_t<format>::render_kw(const std::string_view &kw
 }
 
 template<format_t format>
+inline constexpr void serializer_t<format>::render(const binary_string_view_t &str) {
+    if constexpr(format == format_t::text) {
+        _buffer.push_back('"');
+        base64.encode(str.begin(), str.end(), std::back_inserter(_buffer));
+        _buffer.push_back('"');
+    } else {
+        render_tag_and_number(bin_element_t::bin_string, str.size());
+        std::copy(str.begin(), str.end(), std::back_inserter(_buffer));
+    }
+}
+
+template<format_t format>
 inline constexpr void serializer_t<format>::render(const undefined_t &) {
     if constexpr(format == format_t::text) {
         render_kw(value_t::str_null);
@@ -308,7 +321,7 @@ inline constexpr void serializer_t<format>::render(const bool &b) {
         _buffer.push_back(encode_tag(bin_element_t::boolean, b?1:0));
     }
 }
-inline std::string value_t::stringify() const {
+inline std::string value_t::to_json() const {
     std::string res;
     serializer_t srl(*this);
     std::string_view str;

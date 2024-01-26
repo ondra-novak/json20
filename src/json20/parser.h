@@ -69,7 +69,6 @@ protected:
 
     using state_t = std::conditional_t<format == format_t::text, text_state_t, binary_state_t>;
 
-
     value_t _result;
     std::vector<char> _buffer;
     std::vector<char> _decoded_buffer;
@@ -95,6 +94,7 @@ protected:
     constexpr bool read_text_until(const std::string_view stop_chars, bool &flag);
     constexpr bool parse_top();
     constexpr bool detect_value();
+    template<state_type_t type>
     constexpr bool parse_string(state_t &action);
     constexpr bool parse_number(state_t &action);
     constexpr bool parse_kw(state_t &action);
@@ -106,10 +106,10 @@ protected:
     constexpr bool parse_bin_number(state_t &action);
     constexpr bool parse_bin_neg_number(state_t &action);
     constexpr bool parse_bin_double(state_t &action);
-    constexpr bool parse_bin_string(state_t &action);
-    constexpr bool parse_num_string(state_t &action);
 
-    static constexpr value_t alloc_str(std::string_view s, bool number);
+    static constexpr value_t alloc_str(std::string_view s);
+    static constexpr value_t alloc_num_str(std::string_view s);
+    static constexpr value_t alloc_bin_str(std::string_view s);
     template<typename Iter, typename OutIter>
     static constexpr OutIter decode_json_string(Iter beg, Iter end, OutIter output);
     static constexpr int hex_to_int(char hex);
@@ -284,7 +284,7 @@ inline constexpr bool parser_t<format>::parse_top() {
             }
             return true;
         case state_type_t::string:
-            return parse_string(top);
+            return parse_string<state_type_t::string>(top);
         case state_type_t::object:
             return parse_object(top);
         case state_type_t::object_begin:
@@ -298,9 +298,9 @@ inline constexpr bool parser_t<format>::parse_top() {
         case state_type_t::bin_double:
             return parse_bin_double(top);
         case state_type_t::bin_string:
-            return parse_bin_string(top);
+            return parse_string<state_type_t::bin_string>(top);
         case state_type_t::num_string:
-            return parse_num_string(top);
+            return parse_string<state_type_t::num_string>(top);
     }
 }
 
@@ -398,7 +398,6 @@ inline constexpr bool parser_t<format>::detect_value() {
             case bin_element_t::num_string:
                 _stack.pop_back();
                 _stack.push_back({state_type_t::num_string});
-                _stack.push_back({state_type_t::string});
                 _stack.push_back({state_type_t::bin_number,0,size+1});
                 break;
             case bin_element_t::string:
@@ -409,7 +408,6 @@ inline constexpr bool parser_t<format>::detect_value() {
             case bin_element_t::bin_string:
                 _stack.pop_back();
                 _stack.push_back({state_type_t::bin_string});
-                _stack.push_back({state_type_t::string});
                 _stack.push_back({state_type_t::bin_number,0,size+1});
                 break;
             case bin_element_t::sync:
@@ -425,13 +423,14 @@ inline constexpr bool parser_t<format>::detect_value() {
 
 
 template<format_t format>
+template<typename parser_t<format>::state_type_t type>
 inline constexpr bool parser_t<format>::parse_string(state_t &st) {
     if constexpr(format == format_t::text) {
         if (eof) return set_parse_error();
         decode_json_string(_buffer.begin(), _buffer.end(), std::back_inserter(_decoded_buffer));
         std::string_view dstr(_decoded_buffer.begin(), _decoded_buffer.end());
         if (std::is_constant_evaluated()) {
-            _result = alloc_str(dstr, false);
+            _result = alloc_str(dstr);
         } else {
             _result = value_t(dstr);
         }
@@ -455,9 +454,23 @@ inline constexpr bool parser_t<format>::parse_string(state_t &st) {
              if (_buffer.size() == st.number) {
                  std::string_view dstr(_buffer.begin(), _buffer.end());
                  if (std::is_constant_evaluated()) {
-                     _result = alloc_str(dstr, false);
+                     if constexpr(type == state_type_t::num_string) {
+                             _result = alloc_num_str(dstr);
+                     } else if constexpr(type == state_type_t::bin_string) {
+                             _result = alloc_bin_str(dstr);
+                     } else {
+                         static_assert(type == state_type_t::string);
+                         _result = alloc_str(dstr);
+                     }
                  } else {
-                     _result = value_t(dstr);
+                     if constexpr(type == state_type_t::num_string) {
+                             _result = value_t(number_string_t(dstr));
+                     } else if constexpr(type == state_type_t::bin_string) {
+                             _result = value_t(binary_string_view_t(reinterpret_cast<const unsigned char *>(dstr.data()),dstr.size()));
+                     } else {
+                         static_assert(type == state_type_t::string);
+                         _result = value_t(dstr);
+                     }
                  }
                  _buffer.clear();
                  return true;
@@ -474,7 +487,7 @@ inline constexpr bool parser_t<format>::parse_number(state_t &) {
     if (!nstr.validate()) return set_parse_error();
     if (std::is_constant_evaluated()) {
         if (nstr.is_floating()) {
-            _result = alloc_str(nstr, true);
+            _result = alloc_num_str(nstr);
         } else {
             _result = value_t(static_cast<long>(nstr));
         }
@@ -630,13 +643,24 @@ inline constexpr bool parser_t<format>::skip_ws() {
 }
 
 template<format_t format>
-constexpr value_t parser_t<format>::alloc_str(std::string_view s, bool number) {
-    auto ptr = shared_array_t<char>::create(s.size(), [&](auto from, auto){
-        std::copy(s.begin(), s.end(), from);
-    });
-    return value_t(ptr, number);
-
+constexpr value_t parser_t<format>::alloc_str(std::string_view s) {
+    return value_t(shared_array_t<char>::create(s.size(), [&](auto from, auto){
+            std::copy(s.begin(), s.end(), from);
+        }),false);
 }
+template<format_t format>
+constexpr value_t parser_t<format>::alloc_num_str(std::string_view s) {
+    return value_t(shared_array_t<char>::create(s.size(), [&](auto from, auto){
+            std::copy(s.begin(), s.end(), from);
+        }),true);
+}
+template<format_t format>
+constexpr value_t parser_t<format>::alloc_bin_str(std::string_view s) {
+    return value_t(shared_array_t<unsigned char>::create(s.size(), [&](auto from, auto){
+            std::copy(s.begin(), s.end(), from);
+    }));
+}
+
 
 class parse_error_exception_t: public std::exception {
 public:
@@ -649,7 +673,7 @@ protected:
     std::string _remain;
 };
 
-constexpr value_t value_t::parse(const std::string_view &text) {
+constexpr value_t value_t::from_json(const std::string_view &text) {
     parser_t<format_t::text> pr;
     pr.write(text);
     if (!pr.write("")) throw parse_error_exception_t("");
@@ -689,21 +713,6 @@ inline constexpr bool parser_t<format>::parse_bin_double(state_t &) {
     return true;
 }
 
-template<format_t format>
-inline constexpr bool parser_t<format>::parse_bin_string(state_t &) {
-    return true;
-}
-
-template<format_t format>
-inline constexpr bool parser_t<format>::parse_num_string(state_t &) {
-    std::string_view s = _result.get();
-    if (std::is_constant_evaluated()) {
-        _result = alloc_str(s, true);
-    } else {
-        _result = number_string_t(s);
-    }
-    return true;
-}
 
 
 template class parser_t<format_t::text>;
