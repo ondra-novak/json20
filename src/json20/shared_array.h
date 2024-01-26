@@ -88,6 +88,16 @@ public:
         }
     }
 
+    constexpr void trunc(std::size_t newsz) {
+        if (newsz >= _size) return;
+        if (!std::is_constant_evaluated()) {
+            for (std::size_t i = newsz; i < _size;++i) {
+                std::destroy_at(_data+i);
+            }
+        }
+        _size = newsz;
+    }
+
     constexpr std::size_t size() const {return _size;}
 
     template<std::invocable<T *, T *> Fn>

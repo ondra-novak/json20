@@ -343,6 +343,29 @@ public:
     constexpr iterator_t begin() const;
     constexpr iterator_t end() const;
 
+    ///set field to new value (object)
+    /**
+     * @param key key
+     * @param value value
+     *
+     * If the current value is not object, it is converted to object
+     */
+    void set(std::string_view key, value_t value);
+    ///Sets fields
+    /**
+     * @param list list of fields     *
+     */
+    template<int N>
+    void set(const std::pair<std::string_view, value_t> (&list)[N]);
+
+
+    ///Merge two objects key by key
+    template<typename ConflictSolver>
+    value_t merge_objects(const value_t &val, ConflictSolver &&fn) const;
+    value_t merge_objects(const value_t &val) const;
+    value_t merge_objects_recursive(const value_t &val) const;
+
+
 
 protected:
 
@@ -852,6 +875,94 @@ protected:
 
 };
 
+template<typename ConflictSolver>
+inline value_t value_t::merge_objects(const value_t &val,ConflictSolver &&fn) const {
+    if (val.type() != type_t::object || type() != type_t::object) return val;
+    const object_t &a = as<object_t>();
+    const object_t &b = val.as<object_t>();
+    const key_value_t *resbeg, *resend;
+    auto res = shared_array_t<key_value_t>::create(size()+val.size(), [&](auto beg, auto){
+        resbeg = beg;
+        auto ia = a.begin();
+        auto ea = a.end();
+        auto ib = b.begin();
+        auto eb = b.end();
+        while (ia != ea && ib != eb) {
+            auto sa = ia->key.as<std::string_view>();
+            auto sb = ib->key.as<std::string_view>();
+            if (sa<sb) {
+                *beg= *ia;
+                ++ia;
+            } else if (sa > sb) {
+                *beg= *ib;
+                ++ib;
+            } else {
+                beg->key = ia->key;
+                beg->value = fn(ia->value, ib->value);
+                ++ia;
+                ++ib;
+            }
+            if (beg->value.defined()) {
+                ++beg;
+            }
+        }
+        while (ia != ea) {
+            *beg = *ia;
+            ++ia;
+            ++beg;
+        }
+        while (ib != eb) {
+            *beg = *ib;
+           ++ib;
+           ++beg;
+        }
+        resend = beg;
+    });
+    res->trunc(resend - resbeg);
+    return value_t(res);
+}
+
+inline value_t value_t::merge_objects(const value_t &val) const {
+    return merge_objects(val, [](const value_t &, const value_t &b) {
+        return b;
+    });
+}
+
+inline value_t value_t::merge_objects_recursive(const value_t &val) const {
+    return merge_objects(val, [](const value_t &a, const value_t &b) {
+        return a.merge_objects_recursive(b);
+    });
+}
+
+
+
+inline void value_t::set(std::string_view key, value_t value) {
+    set({{key, value}});
+
+}
+
+template<int N>
+void value_t::set(const std::pair<std::string_view, value_t> (&list)[N]) {
+    if constexpr(N <= 0) return ;
+    const std::pair<std::string_view , value_t> * sortindex[N];
+    int i = 0;
+    for (const auto &x: list) sortindex[++i] = &x;
+    std::sort(std::begin(sortindex), std::end(sortindex), [&](const auto *a, const auto *b){
+        return a->first < b->first;
+    });
+    value_t data[N * 2];
+    for (int i = 0; i < N; ++i) {
+        data[i*2] = sortindex[i]->first;
+        data[i*2+1] = sortindex[i]->second;
+    }
+    value_t obj(data, N, true);
+    (*this) = this->merge_objects(obj);
+}
+
+
+
+
+
 //clang complains for undefined function
 template value_t list_item_t::build_item<std::span<value_t const> >(std::span<value_t const> const*) noexcept;
 //clang complains for undefined function
@@ -861,3 +972,4 @@ template class value_t::t_iterator_t<1>;
 template class value_t::t_iterator_t<2>;;
 
 }
+
