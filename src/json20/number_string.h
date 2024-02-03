@@ -50,18 +50,22 @@ public:
     }
 
     constexpr int log10(double number) const {
-        auto low = minexp;
-        auto high = maxexp+1;
-        while (low < high) {
-            auto mid = (low + high)/2;
-            auto v = pow10(mid);
-            auto adj = number/v;
-            if (adj < 1.0) high = mid-1;
-            else if (adj >= 10.0) low = mid;
-            else return mid;
+        if (number > 0) {
+            auto low = minexp;
+            auto high = maxexp+1;
+            while (low < high) {
+                auto mid = (low+ high - 2*minexp)/2 + minexp;
+                auto v = pow10(mid);
+                auto adj = number/v;
+                if (adj < 1.0) high = mid;
+                else if (adj >= 10.0) low = mid+1;
+                else return mid;
 
+            }
+            return low;
+        } else {
+            return 0;
         }
-        return low;
     }
 
 protected:

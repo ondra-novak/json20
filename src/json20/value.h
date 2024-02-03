@@ -181,6 +181,24 @@ public:
      */
     constexpr value_t(shared_array_t<unsigned char> *str):_data{binary_string, 0, 0, {.shared_bin_str = str}} {}
 
+
+    template<std::forward_iterator Iter, std::invocable<std::iter_value_t<Iter> > Fn>
+    constexpr value_t(Iter begin, Iter end, Fn &&fn) {
+        using RetV = std::decay_t<std::invoke_result_t<Fn, decltype(*begin)> >;
+        using T = std::conditional_t<std::is_same_v<RetV, key_value_t>, RetV,
+                std::conditional_t<std::is_same_v<RetV, char>, RetV, value_t> >;
+        auto arr = shared_array_t<T>::create(std::distance(begin,end), [&](auto beg, auto){
+            std::transform(begin, end, beg, std::forward<Fn>(fn));
+        });
+        if constexpr(std::is_same_v<T, key_value_t>) {
+           std::construct_at(&_data, Data{object,0,0,{.object = arr}});
+        } else if constexpr(std::is_same_v<T, char>) {
+           std::construct_at(&_data, Data{string,0,0,{.shared_str= arr}});
+        } else {
+           std::construct_at(&_data, Data{array,0,0,{.array = arr}});
+        }
+    }
+
     ///Construct string
     /**
      * @param text text to construct
@@ -908,6 +926,8 @@ public:
 
     using value_t::value_t;
 
+    constexpr list_item_t(const value_t &val):value_t(val) {}
+
     constexpr list_item_t(const std::initializer_list<list_item_t> &list)
         :value_t(&list) {}
 
@@ -1286,7 +1306,7 @@ void value_t::set(const std::pair<std::string_view, value_t> (&list)[N]) {
     if constexpr(N <= 0) return ;
     const std::pair<std::string_view , value_t> * sortindex[N];
     int i = 0;
-    for (const auto &x: list) sortindex[++i] = &x;
+    for (const auto &x: list) sortindex[i++] = &x;
     std::sort(std::begin(sortindex), std::end(sortindex), [&](const auto *a, const auto *b){
         return a->first < b->first;
     });

@@ -356,6 +356,11 @@ inline constexpr void serializer_t<format>::render(const double & val) {
             v = val;
         }
 
+        if (v < std::numeric_limits<double>::min()) {
+            _buffer.push_back('0');
+            return;
+        }
+
 
         int exponent = static_cast<int>(number_string_t::get_exponent(v));
         if (exponent > 8 || exponent < -2) {
