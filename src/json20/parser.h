@@ -674,7 +674,7 @@ protected:
 };
 
 constexpr value_t value_t::from_json(const std::string_view &text) {
-    parser_t<format_t::text> pr;
+    parser_t<format_t::text> pr={};
     pr.write(text);
     if (!pr.write("")) throw parse_error_exception_t("");
     if (pr.is_error()) throw parse_error_exception_t(pr.get_unused_text());
