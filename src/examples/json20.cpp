@@ -102,11 +102,11 @@ constexpr std::string_view test_json = R"json(
 }
 )json";
 
-/*
-constexpr auto test_json_parsed = []{
-        return json20::value_container_t<31,87>(json20::value_t::from_json(test_json));
-}();
 
+constexpr auto test_json_parsed = []{
+        return json20::value_container_t<31,89>(json20::value_t::from_json(test_json));
+}();
+/*
 
 constexpr auto test_json_bin = []{
         auto json = json20::value_t::from_json(test_json);
@@ -143,7 +143,7 @@ void hexDump(const std::string& input) {
 
     std::cout << std::endl;
 }
-
+/*
 std::string to_binary(json20::value_t v) {
     std::string res;
     json20::serializer_t<json20::format_t::binary> sr(v);
@@ -153,7 +153,7 @@ std::string to_binary(json20::value_t v) {
 
     return res;
 }
-
+*/
 constexpr json20::binary_data example_binary_data("bGlnaHQgd29yay4=");
 
 
@@ -201,7 +201,7 @@ int main() {
     std::cout << static_cast<int>(vnum.type()) << std::endl;
     std::cout << static_cast<int>(vnum2.type()) << std::endl;
     std::cout << (vtest == obj) << std::endl;
-    std::cout << vtest.to_json() << std::endl;
+    std::cout << test_json_parsed.to_json() << std::endl;
     std::cout << obj.to_string() << std::endl;
 
     std::string ss = vtest.to_json();

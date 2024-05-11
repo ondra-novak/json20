@@ -6,6 +6,202 @@
 namespace json20 {
 
 
+class serializer_t {
+public:
+
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize(const value_t &v, Target &&target) {
+
+        v.visit([&](const auto &data){
+            serialize_item(data, target);
+        });
+
+    }
+
+
+
+
+protected:
+
+    std::vector<char> _buffer;
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const std::string_view &str, Target &target) {
+        std::size_t needsz = 0;
+        for (unsigned char c: str) {
+            if (c < 32) [[unlikely]] {
+                if (c == '\n' || c == '\b' || c == '\t' || c == '\r' || c == '\f') {
+                    ++needsz;
+                } else {
+                    needsz+=5;
+                }
+            } else if (c == '"' || c == '\\') {
+                ++needsz;
+            }
+
+        }
+        needsz += str.size();
+        _buffer.resize(needsz+2, 0);
+        auto wr = _buffer.begin();
+        *wr++='"';
+        for (unsigned char c: str) {
+            if (c < 32) [[unlikely]]{
+                *wr++ = '\\';
+                switch (c) {
+                    case '\n': *wr++ = 'n';break;
+                    case '\b': *wr++ = 'b';break;
+                    case '\r': *wr++ = 'r';break;
+                    case '\f': *wr++ = 'f';break;
+                    case '\t': *wr++ = 't';break;
+                    default: *wr++ = 'u';
+                        for (unsigned int i = 0; i < 4; ++i) {
+                            unsigned char x = (c >> ((3-i) * 4)) & 0xF;
+                            *wr++ = x + (x>9?'A'-10:'0');
+                        }
+                }
+            } else {
+                if (c == '\\' || c == '"') [[unlikely]] {
+                    *wr++ = '\\';
+                }
+                *wr++ = c;
+            }
+        }
+        *wr++='"';
+        target(std::string_view(_buffer.data(), _buffer.size()));
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const bool &v, Target &target) {
+        target(v?"true":"false");
+    }
+
+    template<bool minus, typename V>
+    std::vector<char>::iterator recurse_number_to_str(V val, int sz = 0) {
+        if (val) {
+            auto iter = recurse_number_to_str<minus>(val/10, sz+1);
+            *iter = (val%10) + '0';
+            ++iter;
+            return iter;
+        }
+        if (minus) {
+            _buffer.resize(sz+1);
+            auto iter = _buffer.begin();
+            *iter++ = '-';
+            return iter;
+        } else {
+            _buffer.resize(sz);
+            auto iter = _buffer.begin();
+            return iter;
+
+        }
+    }
+
+    template<signed_integer_number_t V, std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const V &v, Target &target) {
+        if (v < 0) {
+            auto end = recurse_number_to_str<true>(static_cast<std::make_unsigned_t<V> >(-v));
+            target(std::string_view(_buffer.begin(), end));
+        } else if (v>0) {
+            auto end = recurse_number_to_str<false>(static_cast<std::make_unsigned_t<V> >(v));
+            target(std::string_view(_buffer.begin(), end));
+        } else {
+            target("0");
+        }
+    }
+
+
+    template<unsigned_integer_number_t V, std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const V &v, Target &target) {
+        if (v == 0) target("0");
+        else {
+            auto end = recurse_number_to_str<false>(v);
+            target(std::string_view(_buffer.begin(), end));
+        }
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const number_string_t &v, Target &target) {
+        target(std::string_view(v));
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const std::nullptr_t &, Target &target) {
+        target("null");
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const undefined_t &, Target &target) {
+        target("null");
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const binary_string_view_t &data, Target &target) {
+        _buffer.resize((data.size()+2)/3*4+2);
+        auto wr = _buffer.begin();
+        *wr++='"';
+        if (!data.empty()) {
+            wr = base64.encode(data.begin(), data.end(), wr);
+        }
+        *wr++='"';
+        target(std::string_view(_buffer.begin(), wr));
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const array_t &data, Target &target) {
+        if (data.empty()) target("[]");
+        else {
+            target("[");
+            auto iter = data.begin();
+            serialize(*iter, target);
+            ++iter;
+            while (iter != data.end()) {
+                target(",");
+                serialize(*iter, target);
+                ++iter;
+            }
+            target("]");
+        }
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const object_t &data, Target &target) {
+        if (data.empty()) target("{}");
+        else {
+            target("{");
+            auto iter = data.begin();
+            serialize_item(iter->key.as<std::string_view>(), target);
+            target(":");
+            serialize(iter->value, target);
+            ++iter;
+            while (iter != data.end()) {
+                target(",");
+                serialize_item(iter->key.as<std::string_view>(), target);
+                target(":");
+                serialize(iter->value, target);
+                ++iter;
+            }
+            target("}");
+        }
+
+    }
+
+
+
+
+};
+
+inline std::string value_t::to_json() const {
+    std::string res;
+    serializer_t srl;
+    srl.serialize(*this, [&](const std::string_view &a){
+        res.append(a);
+    });
+    return res;
+}
+
+
+#if 0
+
+
+
+
 template<format_t format  = format_t::text>
 class serializer_t {
 public:
@@ -321,13 +517,6 @@ inline constexpr void serializer_t<format>::render(const bool &b) {
         _buffer.push_back(encode_tag(bin_element_t::boolean, b?1:0));
     }
 }
-inline std::string value_t::to_json() const {
-    std::string res;
-    serializer_t srl(*this);
-    std::string_view str;
-    while (!(str = srl.read()).empty()) res.append(str);
-    return res;
-}
 
 template<format_t format>
 inline constexpr void serializer_t<format>::render(const double & val) {
@@ -400,10 +589,11 @@ inline constexpr void serializer_t<format>::render(const double & val) {
         }
     }
 
+
 }
 
 template class serializer_t<format_t::binary>;
 template class serializer_t<format_t::text>;
-
+#endif
 
 }
