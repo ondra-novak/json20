@@ -11,7 +11,7 @@ public:
 
 
     template<std::invocable<std::string_view> Target>
-    constexpr void serialize(const value_t &v, Target &&target) {
+    constexpr void serialize(const value &v, Target &&target) {
 
         v.visit([&](const auto &data){
             serialize_item(data, target);
@@ -145,7 +145,7 @@ protected:
         target(std::string_view(_buffer.begin(), wr));
     }
     template<std::invocable<std::string_view> Target>
-    constexpr void serialize_item(const array_t &data, Target &target) {
+    constexpr void serialize_item(const array_view &data, Target &target) {
         if (data.empty()) target("[]");
         else {
             target("[");
@@ -161,7 +161,7 @@ protected:
         }
     }
     template<std::invocable<std::string_view> Target>
-    constexpr void serialize_item(const object_t &data, Target &target) {
+    constexpr void serialize_item(const object_view &data, Target &target) {
         if (data.empty()) target("{}");
         else {
             target("{");
@@ -187,7 +187,7 @@ protected:
 
 };
 
-inline std::string value_t::to_json() const {
+inline std::string value::to_json() const {
     std::string res;
     serializer_t srl;
     srl.serialize(*this, [&](const std::string_view &a){
@@ -207,7 +207,7 @@ class serializer_t {
 public:
 
 
-    constexpr serializer_t(const value_t &val) {
+    constexpr serializer_t(const value &val) {
         _stack.push_back({
             Type::value, &val, &val+1
         });
@@ -223,10 +223,10 @@ public:
 protected:
 
 
-    constexpr void render_item(const value_t &item);
+    constexpr void render_item(const value &item);
     constexpr void close_item();
-    constexpr void render(const array_t &arr);
-    constexpr void render(const object_t &arr);
+    constexpr void render(const array_view &arr);
+    constexpr void render(const object_view &arr);
     constexpr void render(const std::string_view &str);
     constexpr void render(const number_string_t &str);
     constexpr void render(const binary_string_view_t &str);
@@ -300,8 +300,8 @@ protected:
 
     struct state_t {
         Type type;
-        value_t::iterator_t iter;
-        value_t::iterator_t end;
+        value::iterator_t iter;
+        value::iterator_t end;
     };
 
 
@@ -339,7 +339,7 @@ inline constexpr std::string_view serializer_t<format>::read() {
 
 
 template<format_t format>
-inline constexpr void serializer_t<format>::render_item(const value_t &item) {
+inline constexpr void serializer_t<format>::render_item(const value &item) {
     item.visit([&](const auto &v){
         render(v);
     });
@@ -374,7 +374,7 @@ inline constexpr void serializer_t<format>::close_item() {
 }
 
 template<format_t format>
-inline constexpr void serializer_t<format>::render(const array_t &arr) {
+inline constexpr void serializer_t<format>::render(const array_view &arr) {
     if constexpr(format == format_t::text) {
         _buffer.push_back('[');
     } else {
@@ -382,13 +382,13 @@ inline constexpr void serializer_t<format>::render(const array_t &arr) {
     }
     _stack.push_back({
         Type::array,
-        value_t::iterator_t(arr.data()),
-        value_t::iterator_t(arr.data()+arr.size())
+        value::iterator_t(arr.data()),
+        value::iterator_t(arr.data()+arr.size())
     });
 }
 
 template<format_t format>
-inline constexpr void serializer_t<format>::render(const object_t &obj) {
+inline constexpr void serializer_t<format>::render(const object_view &obj) {
     if constexpr(format == format_t::text) {
         _buffer.push_back('{');
     } else {
@@ -396,8 +396,8 @@ inline constexpr void serializer_t<format>::render(const object_t &obj) {
     }
     _stack.push_back({
         Type::object,
-        value_t::iterator_t(obj.data()),
-        value_t::iterator_t(obj.data()+obj.size())
+        value::iterator_t(obj.data()),
+        value::iterator_t(obj.data()+obj.size())
     });
 }
 
@@ -496,7 +496,7 @@ inline constexpr void serializer_t<format>::render(const binary_string_view_t &s
 template<format_t format>
 inline constexpr void serializer_t<format>::render(const undefined_t &) {
     if constexpr(format == format_t::text) {
-        render_kw(value_t::str_null);
+        render_kw(value::str_null);
     } else {
         _buffer.push_back(static_cast<char>(bin_element_t::undefined));
     }
@@ -504,7 +504,7 @@ inline constexpr void serializer_t<format>::render(const undefined_t &) {
 template<format_t format>
 inline constexpr void serializer_t<format>::render(const std::nullptr_t &) {
     if constexpr(format == format_t::text) {
-        render_kw(value_t::str_null);
+        render_kw(value::str_null);
     } else {
         _buffer.push_back(static_cast<char>(bin_element_t::null));
     }
@@ -512,7 +512,7 @@ inline constexpr void serializer_t<format>::render(const std::nullptr_t &) {
 template<format_t format>
 inline constexpr void serializer_t<format>::render(const bool &b) {
     if constexpr(format == format_t::text) {
-        render_kw(b?value_t::str_true:value_t::str_false);
+        render_kw(b?value::str_true:value::str_false);
     } else {
         _buffer.push_back(encode_tag(bin_element_t::boolean, b?1:0));
     }

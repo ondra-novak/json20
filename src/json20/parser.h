@@ -56,13 +56,13 @@ public:
 
 
     template<std::forward_iterator Iter>
-    constexpr Iter parse(Iter iter, Iter end,  value_t &out);
+    constexpr Iter parse(Iter iter, Iter end,  value &out);
 
 
 
 protected:
 
-    std::vector<value_t> _value_stack;
+    std::vector<value> _value_stack;
     std::vector<char> _str_buff;
 
     template<std::forward_iterator Iter>
@@ -90,16 +90,16 @@ protected:
     }
 
     template<std::forward_iterator Iter>
-    constexpr Iter parse_object(Iter iter, Iter end, value_t &out);
+    constexpr Iter parse_object(Iter iter, Iter end, value &out);
 
     template<std::forward_iterator Iter>
-    constexpr Iter parse_array(Iter iter, Iter end, value_t &out);
+    constexpr Iter parse_array(Iter iter, Iter end, value &out);
 
     template<std::forward_iterator Iter>
-    constexpr Iter parse_string(Iter iter, Iter end, value_t &out);
+    constexpr Iter parse_string(Iter iter, Iter end, value &out);
 
     template<std::forward_iterator Iter>
-    constexpr Iter parse_number(Iter iter, Iter end, value_t &out);
+    constexpr Iter parse_number(Iter iter, Iter end, value &out);
 
     static constexpr std::uint32_t build_bloom_mask(std::string_view chars) {
         std::uint32_t out = 0;
@@ -113,7 +113,7 @@ protected:
 
 
 template<std::forward_iterator Iter>
-constexpr Iter parser_t::parse(Iter iter, Iter end,  value_t &out) {
+constexpr Iter parser_t::parse(Iter iter, Iter end,  value &out) {
     iter = eat_white(iter, end);
     char c = *iter;
     if (c == '"') {
@@ -149,7 +149,7 @@ constexpr Iter parser_t::parse(Iter iter, Iter end,  value_t &out) {
 }
 
 template<std::forward_iterator Iter>
-constexpr Iter parser_t::parse_string(Iter iter, Iter end, value_t &out) {
+constexpr Iter parser_t::parse_string(Iter iter, Iter end, value &out) {
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     if (*iter == '"') {
         out = std::string_view();
@@ -171,9 +171,11 @@ constexpr Iter parser_t::parse_string(Iter iter, Iter end, value_t &out) {
     auto wr = _str_buff.begin();
     while (iter != strend) {
         if (*iter != '\\') {
-            auto anchr = wr;
-            wr = std::copy_if(iter, strend, wr, [](char c){return c != '\\';});
-            std::advance(iter, std::distance(anchr, wr));
+            iter = std::find_if(iter, strend, [&](char c){
+                if (c == '\\') return true;
+                *wr++ = c;
+                return false;
+            });
         } else {
             ++iter;
             if (iter == strend) {
@@ -213,7 +215,8 @@ constexpr Iter parser_t::parse_string(Iter iter, Iter end, value_t &out) {
                             codepoint = 0x10000 + ((first_codepoint - 0xD800) << 10) + (codepoint - 0xDC00);
                         } else {
                             first_codepoint = codepoint;
-                            --wr;
+                            ++iter;
+                            continue;
                         }
                     }
                     if (codepoint <= 0x7F) {
@@ -247,19 +250,20 @@ constexpr Iter parser_t::parse_string(Iter iter, Iter end, value_t &out) {
     }
     std::string_view s(_str_buff.begin(), wr);
     if (std::is_constant_evaluated()) {
-        out = value_t(shared_array_t<char>::create(s.size(), [&](auto from, auto){
+        out = value(shared_array_t<char>::create(s.size(), [&](auto from, auto){
                 std::copy(s.begin(), s.end(), from);
         }),false);
 
     } else {
-        out = s;    }
+        out = s;
+    }
     ++iter;
     return iter;
 }
 
 
 template<std::forward_iterator Iter>
-constexpr Iter parser_t::parse_number(Iter iter, Iter end, value_t &out) {
+constexpr Iter parser_t::parse_number(Iter iter, Iter end, value &out) {
     constexpr auto srch_mask = build_bloom_mask("0123456789-+.Ee");
     constexpr auto is_digit = [](char c) {
         return c>='0' && c <= '9';
@@ -297,14 +301,14 @@ constexpr Iter parser_t::parse_number(Iter iter, Iter end, value_t &out) {
     auto nstr =  number_string_t(std::string_view(_str_buff.data(), sz));
     if (std::is_constant_evaluated()) {
         if (nstr.is_floating()) {
-            out = value_t(shared_array_t<char>::create(nstr.size(), [&](auto from, auto){
+            out = value(shared_array_t<char>::create(nstr.size(), [&](auto from, auto){
                            std::copy(nstr.begin(), nstr.end(), from);
             }),false);
         } else {
-            out = value_t(static_cast<long>(nstr));
+            out = value(static_cast<long>(nstr));
         }
     } else {
-        out = value_t(nstr);
+        out = value(nstr);
     }
     std::advance(iter, sz);
     return iter;
@@ -312,11 +316,11 @@ constexpr Iter parser_t::parse_number(Iter iter, Iter end, value_t &out) {
 }
 
 template<std::forward_iterator Iter>
-constexpr Iter parser_t::parse_array(Iter iter, Iter end, value_t &out) {
+constexpr Iter parser_t::parse_array(Iter iter, Iter end, value &out) {
     iter = eat_white(iter, end);
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     if (*iter == ']') {
-        out = value_t(type_t::array);
+        out = value(type::array);
         ++iter;
         return iter;
     }
@@ -332,24 +336,24 @@ constexpr Iter parser_t::parse_array(Iter iter, Iter end, value_t &out) {
         iter = eat_white(iter, end);
         if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     } while (true);
-    auto arr = shared_array_t<value_t>::create(_value_stack.size() - stpos,[&](auto from, auto){
+    auto arr = shared_array_t<value>::create(_value_stack.size() - stpos,[&](auto from, auto){
         for (std::size_t i = stpos, cnt = _value_stack.size(); i < cnt; ++i) {
             *from = std::move(_value_stack[i]);
             ++from;
         }
     });
-    out = value_t(arr);
+    out = value(arr);
     _value_stack.resize(stpos);
     ++iter;
     return iter;
 }
 
 template<std::forward_iterator Iter>
-constexpr Iter parser_t::parse_object(Iter iter, Iter end, value_t &out) {
+constexpr Iter parser_t::parse_object(Iter iter, Iter end, value &out) {
     iter = eat_white(iter, end);
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     if (*iter == '}') {
-        out = value_t(type_t::object);
+        out = value(type::object);
         ++iter;
         return iter;
     }
@@ -377,22 +381,22 @@ constexpr Iter parser_t::parse_object(Iter iter, Iter end, value_t &out) {
     }
     while (true);
     auto cnt = (_value_stack.size() - stpos)/2;
-    auto arr = shared_array_t<key_value_t>::create(cnt,[&](auto from, auto){
+    auto arr = shared_array_t<key_value>::create(cnt,[&](auto from, auto){
         for (std::size_t i = 0; i < cnt; ++i) {
             from->key = std::move(_value_stack[stpos+i*2]);
             from->value = std::move(_value_stack[stpos+i*2+1]);
             ++from;
         }
     });
-    out = value_t(arr);
+    out = value(arr);
     _value_stack.resize(stpos);
     ++iter;
     return iter;
 }
 
-constexpr value_t value_t::from_json(const std::string_view &text) {
+constexpr value value::from_json(const std::string_view &text) {
     parser_t pr;
-    value_t out;
+    value out;
     pr.parse(text.begin(), text.end(), out);
     return out;
 }
@@ -409,7 +413,7 @@ public:
 
     constexpr bool write(const std::string_view &text);
 
-    constexpr const value_t &get_parsed() const {
+    constexpr const value &get_parsed() const {
         return _result;
     }
 
@@ -425,7 +429,7 @@ public:
 
 protected:
 
-    enum class state_type_t {
+    enum class state_type {
         read_until,
         read_kw,
         number,
@@ -444,24 +448,24 @@ protected:
     };
 
     struct text_state_t {
-        state_type_t st;
+        state_type st;
         bool flag = false;
         std::string_view str = {};
-        value_t key = {};
-        std::vector<value_t> arr = {};
+        value key = {};
+        std::vector<value> arr = {};
     };
 
     struct binary_state_t {
-        state_type_t st;
+        state_type st;
         std::uint64_t number = 0;
         unsigned int byte_count = 0;
-        value_t key = {};
-        std::vector<value_t> arr = {};
+        value key = {};
+        std::vector<value> arr = {};
     };
 
     using state_t = std::conditional_t<format == format_t::text, text_state_t, binary_state_t>;
 
-    value_t _result;
+    value _result;
     std::vector<char> _buffer;
     std::vector<char> _decoded_buffer;
     std::vector<state_t> _stack;
@@ -486,7 +490,7 @@ protected:
     constexpr bool read_text_until(const std::string_view stop_chars, bool &flag);
     constexpr bool parse_top();
     constexpr bool detect_value();
-    template<state_type_t type>
+    template<state_type type>
     constexpr bool parse_string(state_t &action);
     constexpr bool parse_number(state_t &action);
     constexpr bool parse_kw(state_t &action);
@@ -499,16 +503,16 @@ protected:
     constexpr bool parse_bin_neg_number(state_t &action);
     constexpr bool parse_bin_double(state_t &action);
 
-    static constexpr value_t alloc_str(std::string_view s);
-    static constexpr value_t alloc_num_str(std::string_view s);
-    static constexpr value_t alloc_bin_str(std::string_view s);
+    static constexpr value alloc_str(std::string_view s);
+    static constexpr value alloc_num_str(std::string_view s);
+    static constexpr value alloc_bin_str(std::string_view s);
     template<typename Iter, typename OutIter>
     static constexpr OutIter decode_json_string(Iter beg, Iter end, OutIter output);
     static constexpr int hex_to_int(char hex);
 
 
-    constexpr value_t make_object(std::vector<value_t> &keypairs) {
-        shared_array_t<key_value_t> *kvarr = shared_array_t<key_value_t>::create(keypairs.size()/2,[&](auto *beg, auto *end){
+    constexpr value make_object(std::vector<value> &keypairs) {
+        shared_array_t<key_value> *kvarr = shared_array_t<key_value>::create(keypairs.size()/2,[&](auto *beg, auto *end){
             auto iter = keypairs.begin();
            while (beg != end) {
                beg->key = std::move(*iter);
@@ -519,7 +523,7 @@ protected:
 
            }
         });
-        return value_t(kvarr);
+        return value(kvarr);
     }
 };
 
@@ -652,7 +656,7 @@ inline constexpr bool parser_t<format>::read_text_until(const std::string_view s
 }
 template<format_t format>
 inline constexpr void parser_t<format>::reset() {
-    _stack.push_back({state_type_t::detect});
+    _stack.push_back({state_type::detect});
     _is_done = false;
 }
 
@@ -660,39 +664,39 @@ template<format_t format>
 inline constexpr bool parser_t<format>::parse_top() {
     auto &top = _stack.back();
     switch (top.st) {
-        case state_type_t::detect:
+        case state_type::detect:
             return detect_value();
-        case state_type_t::array_begin:
+        case state_type::array_begin:
             return parse_array_begin(top);
-        case state_type_t::array:
+        case state_type::array:
             return parse_array(top);
-        case state_type_t::number:
+        case state_type::number:
             return parse_number(top);
-        case state_type_t::read_kw:
+        case state_type::read_kw:
             return parse_kw(top);
-        case state_type_t::read_until:
+        case state_type::read_until:
             if constexpr(format == format_t::text) {
                 return read_text_until(top.str, top.flag);
             }
             return true;
-        case state_type_t::string:
-            return parse_string<state_type_t::string>(top);
-        case state_type_t::object:
+        case state_type::string:
+            return parse_string<state_type::string>(top);
+        case state_type::object:
             return parse_object(top);
-        case state_type_t::object_begin:
+        case state_type::object_begin:
             return parse_object_begin(top);
-        case state_type_t::skip_ws:
+        case state_type::skip_ws:
             return skip_ws();
-        case state_type_t::bin_number:
+        case state_type::bin_number:
             return parse_bin_number(top);
-        case state_type_t::bin_neg_number:
+        case state_type::bin_neg_number:
             return parse_bin_neg_number(top);
-        case state_type_t::bin_double:
+        case state_type::bin_double:
             return parse_bin_double(top);
-        case state_type_t::bin_string:
-            return parse_string<state_type_t::bin_string>(top);
-        case state_type_t::num_string:
-            return parse_string<state_type_t::num_string>(top);
+        case state_type::bin_string:
+            return parse_string<state_type::bin_string>(top);
+        case state_type::num_string:
+            return parse_string<state_type::num_string>(top);
     }
 }
 
@@ -715,20 +719,20 @@ inline constexpr bool parser_t<format>::detect_value() {
             ++text_begin;
             _stack.pop_back();
             switch (c) {
-                case '[': _stack.push_back({state_type_t::array_begin});
+                case '[': _stack.push_back({state_type::array_begin});
                           break;
-                case '{': _stack.push_back({state_type_t::object_begin});
+                case '{': _stack.push_back({state_type::object_begin});
                           break;
-                case '"': _stack.push_back({state_type_t::string});
-                          _stack.push_back({state_type_t::read_until, false, "\""});
+                case '"': _stack.push_back({state_type::string});
+                          _stack.push_back({state_type::read_until, false, "\""});
                           break;
-                case value_t::str_true[0]: _stack.push_back({state_type_t::read_kw, false, value_t::str_true, true});
+                case value::str_true[0]: _stack.push_back({state_type::read_kw, false, value::str_true, true});
                           --text_begin;
                           break;
-                case value_t::str_false[0]: _stack.push_back({state_type_t::read_kw, false, value_t::str_false, false});
+                case value::str_false[0]: _stack.push_back({state_type::read_kw, false, value::str_false, false});
                           --text_begin;
                           break;
-                case value_t::str_null[0]: _stack.push_back({state_type_t::read_kw, false, value_t::str_null, nullptr});
+                case value::str_null[0]: _stack.push_back({state_type::read_kw, false, value::str_null, nullptr});
                           --text_begin;
                           break;
                 case '0':
@@ -742,8 +746,8 @@ inline constexpr bool parser_t<format>::detect_value() {
                 case '8':
                 case '9':
                 case '-':
-                case '+': _stack.push_back({state_type_t::number});
-                          _stack.push_back({state_type_t::read_until, false, ",}] \t\r\n"});
+                case '+': _stack.push_back({state_type::number});
+                          _stack.push_back({state_type::read_until, false, ",}] \t\r\n"});
                           --text_begin;
                           break;
                 default:
@@ -766,41 +770,41 @@ inline constexpr bool parser_t<format>::detect_value() {
                 return true;
             case bin_element_t::num_double:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::bin_double});
-                _stack.push_back({state_type_t::bin_number, 0,8});
+                _stack.push_back({state_type::bin_double});
+                _stack.push_back({state_type::bin_number, 0,8});
                 break;
             case bin_element_t::pos_number:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::bin_number, 0,size+1});
+                _stack.push_back({state_type::bin_number, 0,size+1});
                 break;
             case bin_element_t::neg_number:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::bin_neg_number, 0,size+1});
+                _stack.push_back({state_type::bin_neg_number, 0,size+1});
                 break;
             case bin_element_t::array:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::array});
-                _stack.push_back({state_type_t::bin_number, 0,size+1});
+                _stack.push_back({state_type::array});
+                _stack.push_back({state_type::bin_number, 0,size+1});
                 break;
             case bin_element_t::object:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::object});
-                _stack.push_back({state_type_t::bin_number, 0,size+1});
+                _stack.push_back({state_type::object});
+                _stack.push_back({state_type::bin_number, 0,size+1});
                 break;
             case bin_element_t::num_string:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::num_string});
-                _stack.push_back({state_type_t::bin_number,0,size+1});
+                _stack.push_back({state_type::num_string});
+                _stack.push_back({state_type::bin_number,0,size+1});
                 break;
             case bin_element_t::string:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::string});
-                _stack.push_back({state_type_t::bin_number,0,size+1});
+                _stack.push_back({state_type::string});
+                _stack.push_back({state_type::bin_number,0,size+1});
                 break;
             case bin_element_t::bin_string:
                 _stack.pop_back();
-                _stack.push_back({state_type_t::bin_string});
-                _stack.push_back({state_type_t::bin_number,0,size+1});
+                _stack.push_back({state_type::bin_string});
+                _stack.push_back({state_type::bin_number,0,size+1});
                 break;
             case bin_element_t::sync:
                 break;
@@ -815,7 +819,7 @@ inline constexpr bool parser_t<format>::detect_value() {
 
 
 template<format_t format>
-template<typename parser_t<format>::state_type_t type>
+template<typename parser_t<format>::state_type type>
 inline constexpr bool parser_t<format>::parse_string(state_t &st) {
     if constexpr(format == format_t::text) {
         if (eof) return set_parse_error();
@@ -824,7 +828,7 @@ inline constexpr bool parser_t<format>::parse_string(state_t &st) {
         if (std::is_constant_evaluated()) {
             _result = alloc_str(dstr);
         } else {
-            _result = value_t(dstr);
+            _result = value(dstr);
         }
         ++text_begin;
         _buffer.clear();
@@ -846,22 +850,22 @@ inline constexpr bool parser_t<format>::parse_string(state_t &st) {
              if (_buffer.size() == st.number) {
                  std::string_view dstr(_buffer.begin(), _buffer.end());
                  if (std::is_constant_evaluated()) {
-                     if constexpr(type == state_type_t::num_string) {
+                     if constexpr(type == state_type::num_string) {
                              _result = alloc_num_str(dstr);
-                     } else if constexpr(type == state_type_t::bin_string) {
+                     } else if constexpr(type == state_type::bin_string) {
                              _result = alloc_bin_str(dstr);
                      } else {
-                         static_assert(type == state_type_t::string);
+                         static_assert(type == state_type::string);
                          _result = alloc_str(dstr);
                      }
                  } else {
-                     if constexpr(type == state_type_t::num_string) {
-                             _result = value_t(number_string_t(dstr));
-                     } else if constexpr(type == state_type_t::bin_string) {
-                             _result = value_t(binary_string_view_t(reinterpret_cast<const unsigned char *>(dstr.data()),dstr.size()));
+                     if constexpr(type == state_type::num_string) {
+                             _result = value(number_string_t(dstr));
+                     } else if constexpr(type == state_type::bin_string) {
+                             _result = value(binary_string_view_t(reinterpret_cast<const unsigned char *>(dstr.data()),dstr.size()));
                      } else {
-                         static_assert(type == state_type_t::string);
-                         _result = value_t(dstr);
+                         static_assert(type == state_type::string);
+                         _result = value(dstr);
                      }
                  }
                  _buffer.clear();
@@ -881,10 +885,10 @@ inline constexpr bool parser_t<format>::parse_number(state_t &) {
         if (nstr.is_floating()) {
             _result = alloc_num_str(nstr);
         } else {
-            _result = value_t(static_cast<long>(nstr));
+            _result = value(static_cast<long>(nstr));
         }
     } else {
-        _result = value_t(nstr);
+        _result = value(nstr);
     }
     _buffer.clear();
     return true;
@@ -917,12 +921,12 @@ inline constexpr bool parser_t<format>::parse_array_begin(state_t &) {
     if (skip_ws()) {
         if (*text_begin == ']') {
             ++text_begin;
-            _result = type_t::array;
+            _result = type::array;
             return true;
         }
         _stack.pop_back();
-        _stack.push_back({state_type_t::array});
-        _stack.push_back({state_type_t::detect});
+        _stack.push_back({state_type::array});
+        _stack.push_back({state_type::detect});
     }
     return false;
 }
@@ -934,30 +938,30 @@ inline constexpr bool parser_t<format>::parse_array(state_t &action) {
         if (skip_ws()) {
             action.arr.push_back(std::move(_result));
             if (*text_begin == ']') {
-                _result = value_t(action.arr);
+                _result = value(action.arr);
                 ++text_begin;
                 return true;
             }
             if (*text_begin != ',') return set_parse_error();
             ++text_begin;
-            _stack.push_back({state_type_t::detect});
+            _stack.push_back({state_type::detect});
         }
     } else {
         if (action.number == 0) {
             action.number = _result.get();
             if (action.number == 0) {
-                _result = value_t(type_t::array);
+                _result = value(type::array);
                 return true;
             }
             action.arr.reserve(action.number);
-            _stack.push_back({state_type_t::detect});
+            _stack.push_back({state_type::detect});
         } else {
             action.arr.push_back(std::move(_result));
             if (action.arr.size() == action.number) {
-                _result = value_t(action.arr);
+                _result = value(action.arr);
                 return true;
             }
-            _stack.push_back({state_type_t::detect});
+            _stack.push_back({state_type::detect});
         }
     }
     return false;
@@ -969,12 +973,12 @@ inline constexpr bool parser_t<format>::parse_object_begin(state_t &) {
     if (skip_ws()) {
         if (*text_begin == '}') {
             ++text_begin;
-            _result = type_t::object;
+            _result = type::object;
             return true;
         }
         _stack.pop_back();
-        _stack.push_back({state_type_t::object});
-        _stack.push_back({state_type_t::detect});
+        _stack.push_back({state_type::object});
+        _stack.push_back({state_type::detect});
     }
     return false;
 
@@ -986,7 +990,7 @@ inline constexpr bool parser_t<format>::parse_object(state_t &action) {
         if (eof) return set_parse_error();
         if (skip_ws()) {
             if ((action.arr.size() & 0x1) == 0) {
-                if (_result.type() != type_t::string) return set_parse_error();
+                if (_result.type() != type::string) return set_parse_error();
                 if (*text_begin != ':') return set_parse_error();
                 action.arr.push_back(std::move(_result));
             } else {
@@ -999,25 +1003,25 @@ inline constexpr bool parser_t<format>::parse_object(state_t &action) {
                 if (*text_begin != ',') return set_parse_error();
             }
             ++text_begin;
-            _stack.push_back({state_type_t::detect});
+            _stack.push_back({state_type::detect});
         }
     } else {
         if (action.number == 0) {
             action.number = _result.get();
             if (action.number == 0) {
-                _result = value_t(type_t::object);
+                _result = value(type::object);
                 return true;
             }
             action.number *= 2;
             action.arr.reserve(action.number);
-            _stack.push_back({state_type_t::detect});
+            _stack.push_back({state_type::detect});
         } else {
             action.arr.push_back(std::move(_result));
             if (action.arr.size() == action.number) {
                 _result = make_object(action.arr);
                 return true;
             }
-            _stack.push_back({state_type_t::detect});
+            _stack.push_back({state_type::detect});
         }
     }
     return false;
@@ -1035,20 +1039,20 @@ inline constexpr bool parser_t<format>::skip_ws() {
 }
 
 template<format_t format>
-constexpr value_t parser_t<format>::alloc_str(std::string_view s) {
-    return value_t(shared_array_t<char>::create(s.size(), [&](auto from, auto){
+constexpr value parser_t<format>::alloc_str(std::string_view s) {
+    return value(shared_array_t<char>::create(s.size(), [&](auto from, auto){
             std::copy(s.begin(), s.end(), from);
         }),false);
 }
 template<format_t format>
-constexpr value_t parser_t<format>::alloc_num_str(std::string_view s) {
-    return value_t(shared_array_t<char>::create(s.size(), [&](auto from, auto){
+constexpr value parser_t<format>::alloc_num_str(std::string_view s) {
+    return value(shared_array_t<char>::create(s.size(), [&](auto from, auto){
             std::copy(s.begin(), s.end(), from);
         }),true);
 }
 template<format_t format>
-constexpr value_t parser_t<format>::alloc_bin_str(std::string_view s) {
-    return value_t(shared_array_t<unsigned char>::create(s.size(), [&](auto from, auto){
+constexpr value parser_t<format>::alloc_bin_str(std::string_view s) {
+    return value(shared_array_t<unsigned char>::create(s.size(), [&](auto from, auto){
             std::copy(s.begin(), s.end(), from);
     }));
 }

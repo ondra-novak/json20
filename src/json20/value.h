@@ -17,10 +17,10 @@ using binary_string_view_t = std::basic_string_view<unsigned char>;
 using binary_string_t = std::basic_string<unsigned char>;
 
 ///holds key and value
-struct key_value_t;
+struct key_value;
 
 ///standard JSON value type
-enum class type_t {
+enum class type {
     ///value is not defined (nether value nor null)
     undefined,
     ///value is null
@@ -38,7 +38,7 @@ enum class type_t {
 };
 
 ///Some tags for strings
-enum class string_type_t {
+enum class string_type {
     ///utf_8 string
     utf_8,
     ///binary string
@@ -48,13 +48,15 @@ enum class string_type_t {
 };
 
 namespace _details {
-    class list_item_t;
+    class list_item;
 }
 
-class value_t;
+class value;
+template<unsigned int N> class array;
+template<unsigned int N> class object;
 
-using array_t = std::span<const value_t>;
-using object_t = std::span<const key_value_t>;
+using array_view = std::span<const value>;
+using object_view = std::span<const key_value>;
 
 /*
  * string < 16 letters
@@ -96,7 +98,7 @@ using object_t = std::span<const key_value_t>;
 
 
 ///Declaration of JSON value
-class value_t {
+class value {
 public:
 
     ///Text representation of null value
@@ -109,62 +111,66 @@ public:
     static constexpr std::string_view str_undefined = "undefined";
 
     ///constructs undefined value
-    constexpr value_t():_data{undef_default, 0, 0, {}} {}
-    constexpr ~value_t();
+    constexpr value():_data{undef_default, 0, 0, {}} {}
+    constexpr ~value();
 
     ///construct copy
-    constexpr value_t(const value_t &other);
+    constexpr value(const value &other);
     ///move constructor
-    constexpr value_t( value_t &&other);
+    constexpr value( value &&other);
     ///assign by copy
-    constexpr value_t &operator=(const value_t &other);
+    constexpr value &operator=(const value &other);
     ///assign by move
-    constexpr value_t &operator=( value_t &&other);
+    constexpr value &operator=( value &&other);
 
     ///construct null
-    constexpr value_t(std::nullptr_t):_data{null,0,0,{}} {}
+    constexpr value(std::nullptr_t):_data{null,0,0,{}} {}
     ///construct from c-text
-    constexpr value_t(const char *text):value_t(std::string_view(text)) {}
+    constexpr value(const char *text):value(std::string_view(text)) {}
     ///construct bool
-    constexpr value_t(bool b):_data{boolean,0,0, {.b = b}} {}
+    constexpr value(bool b):_data{boolean,0,0, {.b = b}} {}
     ///construct int
-    constexpr value_t(int val):_data{vint,0,0,{.vint = val}} {}
+    constexpr value(int val):_data{vint,0,0,{.vint = val}} {}
     ///construct unsigned int number
-    constexpr value_t(unsigned int val):_data{vuint,0,0,{.vuint = val}} {}
+    constexpr value(unsigned int val):_data{vuint,0,0,{.vuint = val}} {}
     ///construct long number
-    constexpr value_t(long val):_data{vlong,0,0,{.vlong = val}} {}
+    constexpr value(long val):_data{vlong,0,0,{.vlong = val}} {}
     ///construct unsigned long number
-    constexpr value_t(unsigned long val):_data{vulong,0,0,{.vulong = val}} {}
+    constexpr value(unsigned long val):_data{vulong,0,0,{.vulong = val}} {}
     ///construct long long number
-    constexpr value_t(long long val):_data{vllong,0,0,{.vllong = val}} {}
+    constexpr value(long long val):_data{vllong,0,0,{.vllong = val}} {}
     ///construct unsigned long long number
-    constexpr value_t(unsigned long long val):_data{vullong,0,0,{.vullong = val}} {}
+    constexpr value(unsigned long long val):_data{vullong,0,0,{.vullong = val}} {}
     ///construct double value
-    constexpr value_t(double val):_data{dbl,0,0,{.d = val}} {}
+    constexpr value(double val):_data{dbl,0,0,{.d = val}} {}
     ///construct structured value (array or object)
     /**
      * @param lst if there is array of pairs, where first of the pair is string, an
      * object is constructed, otherwise, an array is constructed
      */
-    constexpr value_t(const std::initializer_list<_details::list_item_t> &lst);
+    constexpr value(const std::initializer_list<_details::list_item> &lst);
     ///construct array
-    constexpr value_t(const array_t &arr);
+    constexpr value(const array_view &arr);
     ///construct object
-    constexpr value_t(const object_t &obj);
+    constexpr value(const object_view &obj);
+    ///construct array from constexpr array
+    template<unsigned int N>
+    constexpr value(const array<N> &arr);
+    ///construct object from constexpr object
+    template<unsigned int N>
+    constexpr value(const object<N> &obj);
+///construct from shared array
+    /**
+     * @param arr pointer to array as shared_array object. The ownership is transfered to
+     * the value_t
+     */
+    explicit constexpr value(shared_array_t<value> *arr):_data{shared_array, 0, 0, {.shared_array = arr}} {}
     ///construct from shared array
     /**
      * @param arr pointer to array as shared_array object. The ownership is transfered to
      * the value_t
      */
-    explicit constexpr value_t(shared_array_t<value_t> *arr):_data{array, 0, 0, {.array = arr}} {}
-    ///construct from shared array
-    /**
-     * @param arr pointer to array as shared_array object. The ownership is transfered to
-     * the value_t
-     */
-    explicit constexpr value_t(shared_array_t<key_value_t> *obj):_data{object, 0, 0, {.object = obj}} {
-        sort_object(_data.object);
-    }
+    explicit constexpr value(shared_array_t<key_value> *obj);
     ///construct string from shared string buffer
     /**
      *
@@ -172,30 +178,30 @@ public:
      * @param number specify true if the buffer is number as string
      */
 
-    constexpr value_t(shared_array_t<char> *str, bool number):_data{number?number_string:string, 0, 0, {.shared_str = str}} {}
+    constexpr value(shared_array_t<char> *str, bool number):_data{number?number_string:string, 0, 0, {.shared_str = str}} {}
 
     ///construct binary string from shared string buffer
     /**
      *
      * @param str string buffer - pointer ownership is transfered
      */
-    constexpr value_t(shared_array_t<unsigned char> *str):_data{binary_string, 0, 0, {.shared_bin_str = str}} {}
+    constexpr value(shared_array_t<unsigned char> *str):_data{binary_string, 0, 0, {.shared_bin_str = str}} {}
 
 
     template<std::forward_iterator Iter, std::invocable<std::iter_value_t<Iter> > Fn>
-    constexpr value_t(Iter begin, Iter end, Fn &&fn) {
+    constexpr value(Iter begin, Iter end, Fn &&fn) {
         using RetV = std::decay_t<std::invoke_result_t<Fn, decltype(*begin)> >;
-        using T = std::conditional_t<std::is_same_v<RetV, key_value_t>, RetV,
-                std::conditional_t<std::is_same_v<RetV, char>, RetV, value_t> >;
+        using T = std::conditional_t<std::is_same_v<RetV, key_value>, RetV,
+                std::conditional_t<std::is_same_v<RetV, char>, RetV, value> >;
         auto arr = shared_array_t<T>::create(std::distance(begin,end), [&](auto beg, auto){
             std::transform(begin, end, beg, std::forward<Fn>(fn));
         });
-        if constexpr(std::is_same_v<T, key_value_t>) {
-           std::construct_at(&_data, Data{object,0,0,{.object = arr}});
+        if constexpr(std::is_same_v<T, key_value>) {
+           std::construct_at(&_data, Data{shared_object,0,0,{.shared_object = arr}});
         } else if constexpr(std::is_same_v<T, char>) {
            std::construct_at(&_data, Data{string,0,0,{.shared_str= arr}});
         } else {
-           std::construct_at(&_data, Data{array,0,0,{.array = arr}});
+           std::construct_at(&_data, Data{shared_array,0,0,{.shared_array = arr}});
         }
     }
 
@@ -208,7 +214,7 @@ public:
      *
      */
 
-    constexpr value_t(std::string_view text) {
+    constexpr value(std::string_view text) {
         if (std::is_constant_evaluated()) {
             std::construct_at(&_data, Data{string_view, 0,static_cast<std::uint32_t>(text.size()), {text.data()}});
         } else {
@@ -233,7 +239,7 @@ public:
      * copies the string into the object (uses small string buffer, or allocates the buffer)
      *
      */
-    constexpr value_t(const number_string_t &text) {
+    constexpr value(const number_string_t &text) {
         if (std::is_constant_evaluated()) {
             std::construct_at(&_data, Data{number_string_view, 0,static_cast<std::uint32_t>(text.size()), {text.data()}});
         } else {
@@ -251,7 +257,7 @@ public:
 
     }
 
-    constexpr value_t(const binary_string_view_t &bin_text) {
+    constexpr value(const binary_string_view_t &bin_text) {
         if (std::is_constant_evaluated()) {
             std::construct_at(&_data, Data{binary_string_view, 0,static_cast<std::uint32_t>(bin_text.size()), {.bin_str_view = bin_text.data()}});
         } else {
@@ -260,16 +266,6 @@ public:
             })}};
         }
     }
-
-
-    ///Construct array or object as view to preallocated buffer of items
-    /**
-     * @param elements pointer to elements
-     * @param sz count of items. For object, you specify count of pairs (so if need to divide count of elements by two)
-     * @param is_object specify true, if the pointer points to an object (where elements are in format string, value, string, value)
-     */
-    constexpr value_t(const value_t *elements, std::size_t sz, bool is_object)
-        :_data({is_object?c_object:c_array,0,static_cast<std::uint32_t>(sz),{.c_array = elements}}) {}
 
 
     ///Construct default value for specified type
@@ -283,15 +279,15 @@ public:
      * @retval [] type was type_t::array
      * @retval {} type was type_t::object
      */
-    constexpr value_t(type_t type) {
+    constexpr value(type type) {
         switch (type) {
-            case type_t::undefined: std::construct_at(&_data, Data{undef,0,0,{}}); break;
-            case type_t::null: std::construct_at(&_data, Data{null,0,0,{}}); break;
-            case type_t::boolean: std::construct_at(&_data, Data{boolean,0,0,{}}); break;
-            case type_t::string: std::construct_at(&_str, LocalStr()); break;
-            case type_t::number: std::construct_at(&_data, Data{vint,0,0,{}}); break;
-            case type_t::array: std::construct_at(&_data, Data{c_array,0,0,{.c_array = nullptr}}); break;
-            case type_t::object: std::construct_at(&_data, Data{c_object,0,0,{.c_array = nullptr}}); break;
+            case type::undefined: std::construct_at(&_data, Data{undef,0,0,{}}); break;
+            case type::null: std::construct_at(&_data, Data{null,0,0,{}}); break;
+            case type::boolean: std::construct_at(&_data, Data{boolean,0,0,{}}); break;
+            case type::string: std::construct_at(&_str, LocalStr()); break;
+            case type::number: std::construct_at(&_data, Data{vint,0,0,{}}); break;
+            case type::array: std::construct_at(&_data, Data{const_array,0,0,{.const_array = nullptr}}); break;
+            case type::object: std::construct_at(&_data, Data{const_object,0,0,{.const_object = nullptr}}); break;
         }
     }
 
@@ -302,8 +298,8 @@ public:
      * @param txt preallocated string
      * @return value
      */
-    static constexpr value_t create_string_view(std::string_view txt) {
-        value_t out;
+    static constexpr value create_string_view(std::string_view txt) {
+        value out;
         out._data.type = string_view;
         out._data.size = txt.size();
         out._data.str_view = txt.data();
@@ -324,7 +320,7 @@ public:
      * with array_t or object_t.
      */
     template<typename Fn>
-    constexpr auto visit(Fn &&fn) const;
+    constexpr decltype(auto) visit(Fn &&fn) const;
 
     ///Returns count of elements in the container
     /**
@@ -339,13 +335,13 @@ public:
      *
      * @note you can use this operator for object too.
      */
-    constexpr const value_t &operator[](std::size_t pos) const;
+    constexpr const value &operator[](std::size_t pos) const;
     ///Access the value of the obj addressed by a key
     /**
      * @param  key value
      * @return value under the key, if the key doesn't exists, returns undefined
      */
-    constexpr const value_t &operator[](std::string_view) const;
+    constexpr const value &operator[](std::string_view) const;
 
     ///Access the key at index
     /**
@@ -380,11 +376,11 @@ public:
 
         getter_t(const getter_t  &) = delete;
         getter_t &operator=(const getter_t  &) = delete;
-        constexpr getter_t(const value_t &val):_val(val) {};
+        constexpr getter_t(const value &val):_val(val) {};
         template<typename T>
         constexpr operator T() const {return _val.as<T>();}
     protected:
-        const value_t &_val;
+        const value &_val;
     };
 
     ///Get value and use getter to automatically convert to required type
@@ -417,30 +413,30 @@ public:
     /**
      * @return standard JSON type of the value
      */
-    constexpr type_t type() const {
+    constexpr type type() const {
         switch (_data.type) {
             case undef_default:
-            case undef: return type_t::undefined;
-            case null: return type_t::null;
+            case undef: return type::undefined;
+            case null: return type::null;
             case string_view:
-            case string: return type_t::string;
-            case array:
-            case c_array: return type_t::array;
-            case object:
-            case c_object: return type_t:: object;
-            case boolean: return type_t::boolean;
+            case string: return type::string;
+            case shared_array:
+            case const_array: return type::array;
+            case shared_object:
+            case const_object: return type:: object;
+            case boolean: return type::boolean;
             case vint:
             case vuint:
             case vlong:
             case vulong:
             case vllong:
             case vullong:
-            case dbl: return type_t::number;
-            case list: return type_t::array;
+            case dbl: return type::number;
+            case list: return type::array;
             case number_string_view:
-            case number_string: return type_t::number;
+            case number_string: return type::number;
             default:
-                return _str.isnum?type_t::number: type_t::string;
+                return _str.isnum?type::number: type::string;
         }
     }
 
@@ -461,7 +457,7 @@ public:
      */
     constexpr std::string_view key() const {
         if (_data.has_key)  {
-            const value_t *k = this;
+            const value *k = this;
             --k;
             return k->as<std::string_view>();
         } else {
@@ -469,35 +465,33 @@ public:
         }
     }
 
-    ///Iterator - generic
-    template<int step>
-    class t_iterator_t {
+    class iterator_t {
     public:
         using iterator_category = std::random_access_iterator_tag;
-        using value_type = value_t;
+        using value_type = value;
         using difference_type = std::ptrdiff_t;
         using pointer = const value_type*;
         using reference = const value_type&;
 
-        constexpr t_iterator_t():is_kv(false),pos_val(nullptr) {}
-        constexpr t_iterator_t(const key_value_t *pos):is_kv(true),pos_kv(pos) {}
-        constexpr t_iterator_t(const value_t *pos):is_kv(false),pos_val(pos) {}
-        constexpr t_iterator_t &operator++();
-        constexpr t_iterator_t &operator--();
-        constexpr t_iterator_t &operator+=(difference_type n);
-        constexpr t_iterator_t &operator-=(difference_type n);
-        constexpr t_iterator_t operator++(int) {
-            t_iterator_t tmp = *this; operator++(); return tmp;
+        constexpr iterator_t():is_kv(false),pos_val(nullptr) {}
+        constexpr iterator_t(const key_value *pos):is_kv(true),pos_kv(pos) {}
+        constexpr iterator_t(const value *pos):is_kv(false),pos_val(pos) {}
+        constexpr iterator_t &operator++();
+        constexpr iterator_t &operator--();
+        constexpr iterator_t &operator+=(difference_type n);
+        constexpr iterator_t &operator-=(difference_type n);
+        constexpr iterator_t operator++(int) {
+            iterator_t tmp = *this; operator++(); return tmp;
         }
-        constexpr t_iterator_t operator--(int) {
-            t_iterator_t tmp = *this; operator--(); return tmp;
+        constexpr iterator_t operator--(int) {
+            iterator_t tmp = *this; operator--(); return tmp;
         }
-        constexpr t_iterator_t operator+(difference_type n) const;
-        constexpr t_iterator_t operator-(difference_type n) const;
-        constexpr std::ptrdiff_t operator-(const t_iterator_t &other) const;
-        constexpr const value_t &operator *() const ;
+        constexpr iterator_t operator+(difference_type n) const;
+        constexpr iterator_t operator-(difference_type n) const;
+        constexpr std::ptrdiff_t operator-(const iterator_t &other) const;
+        constexpr const value &operator *() const ;
         constexpr std::string_view key() const;
-        constexpr bool operator==(const t_iterator_t &other) const {
+        constexpr bool operator==(const iterator_t &other) const {
             return is_kv?pos_kv == other.pos_kv:pos_val == other.pos_val;
         }
 
@@ -505,16 +499,14 @@ public:
 
         bool is_kv;
         union {
-            const value_t *pos_val;
-            const key_value_t *pos_kv;
+            const value *pos_val;
+            const key_value *pos_kv;
         };
     };
 
-    ///iterator
-    using iterator_t = t_iterator_t<1>;
 
     ///compare values
-    constexpr bool operator==(const value_t &other) const;
+    constexpr bool operator==(const value &other) const;
 
     ///convert to string
     /**
@@ -539,7 +531,7 @@ public:
      *
      * @note requires parser.h
      */
-    static constexpr value_t from_json(const std::string_view &text);
+    static constexpr value from_json(const std::string_view &text);
 
     ///first element of array or object
     constexpr iterator_t begin() const;
@@ -553,20 +545,20 @@ public:
      *
      * If the current value is not object, it is converted to object
      */
-    void set(std::string_view key, value_t value);
+    void set(std::string_view key, value value);
     ///Sets fields
     /**
      * @param list list of fields     *
      */
     template<int N>
-    void set(const std::pair<std::string_view, value_t> (&list)[N]);
+    void set(const std::pair<std::string_view, value> (&list)[N]);
 
 
     ///Merge two objects key by key
     template<typename ConflictSolver>
-    value_t merge_objects(const value_t &val, ConflictSolver &&fn) const;
-    value_t merge_objects(const value_t &val) const;
-    value_t merge_objects_recursive(const value_t &val) const;
+    value merge_objects(const value &val, ConflictSolver &&fn) const;
+    value merge_objects(const value &val) const;
+    value merge_objects_recursive(const value &val) const;
 
 
 
@@ -574,15 +566,17 @@ public:
 
 protected:
 
-    explicit constexpr value_t(const std::initializer_list<_details::list_item_t> *lst):_data{list, 0,0,{.list = lst}} {}
+    explicit constexpr value(const std::initializer_list<_details::list_item> *lst):_data{list, 0,0,{.list = lst}} {}
 
-    static constexpr void sort_object(shared_array_t<key_value_t> *obj);
+    template<typename Iter>
+    static constexpr void sort_object(Iter beg, Iter end);
+
 
     enum Type : unsigned char{
         ///undefined value
         undef = 32,
         ///undefined value constructed by default constructor
-        undef_default = 33,
+        undef_default,
         ///null value
         null,
         ///string view  (str_view)
@@ -590,9 +584,9 @@ protected:
         ///string allocated/shared
         string,
         ///array allocated/shared
-        array,
+        shared_array,
         ///object allocated/shared
-        object,
+        shared_object,
         ///boolean value
         boolean,
         ///signed int
@@ -610,9 +604,9 @@ protected:
         ///double
         dbl,
         ///constant array pointer
-        c_array,
-        ///object array - pointer to array, interleaved key-value
-        c_object,
+        const_array,
+        ///object array - pointer to key_value array (sorted)
+        const_object,
         ///pointer to initializer list (internal)
         list,
         ///string (allocated) as number
@@ -657,13 +651,15 @@ protected:
             ///pointer to shared string buffer
             shared_array_t<unsigned char> *shared_bin_str;
             ///pointer to shared array
-            shared_array_t<value_t> *array;
+            shared_array_t<value> *shared_array;
             ///pointer to shared object
-            shared_array_t<key_value_t> *object;
+            shared_array_t<key_value> *shared_object;
             ///pointer to statically allocated array
-            const value_t *c_array;
+            const value *const_array;
+            ///pointer to statically allocated array
+            const key_value *const_object;
             ///pointer to initializer list
-            const std::initializer_list<_details::list_item_t> *list;
+            const std::initializer_list<_details::list_item> *list;
             ///number
             int vint;
             ///number
@@ -689,14 +685,15 @@ protected:
         Data _data;
     };
 
-    constexpr value_t &mark_has_key() {
+    constexpr value &mark_has_key() {
         _data.has_key = 1;
         return *this;
     }
 
     template<std::size_t Elements, std::size_t StringBytes>
     friend class value_container_t;
-    friend class _details::list_item_t;
+    template<unsigned int N> friend class object;
+    friend class _details::list_item;
 
     constexpr bool is_small_string() const {
         return _data.type < undef;
@@ -708,8 +705,8 @@ protected:
             case number_string:
             case string: fn(_data.shared_str);break;
             case binary_string: fn(_data.shared_bin_str);break;
-            case array: fn(_data.array);break;
-            case object: fn(_data.object);break;
+            case shared_array: fn(_data.shared_array);break;
+            case shared_object: fn(_data.shared_object);break;
             default:break;
         }
 
@@ -718,30 +715,33 @@ protected:
 };
 
 
-struct key_value_t {
-    value_t key;
-    value_t value;
+struct key_value {
+    value key;
+    value value;
 
-    constexpr bool operator==(const key_value_t &other) const {
+    constexpr bool operator==(const key_value &other) const {
         return key == other.key && value == other.value;
     }
 };
 
-inline constexpr value_t::value_t(const array_t &arr)
-    :_data{array, 0, 0,{.array = shared_array_t<value_t>::create(arr.size(), [&](auto from, auto ){
+inline constexpr value::value(const array_view &arr)
+    :_data{shared_array, 0, 0,{.shared_array = shared_array_t<value>::create(arr.size(), [&](auto from, auto ){
     std::copy(arr.begin(), arr.end(), from);
 })}} {}
 
-inline constexpr value_t::value_t(const object_t &obj)
-:_data{object, 0, 0,{.object = shared_array_t<key_value_t>::create(obj.size(), [&](auto from, auto ){
+inline constexpr value::value(const object_view &obj)
+:_data{shared_object, 0, 0,{.shared_object = shared_array_t<key_value>::create(obj.size(), [&](auto from, auto ){
     std::copy(obj.begin(), obj.end(), from);
 })}} {
-    sort_object(_data.object);
-    for (auto &x: *_data.object) x.value.mark_has_key();
+    sort_object(_data.shared_object->begin(), _data.shared_object->end());
+}
+
+constexpr value::value(shared_array_t<key_value> *obj):_data{shared_object, 0, 0, {.shared_object = obj}} {
+    sort_object(_data.shared_object->begin(), _data.shared_object->end());
 }
 
 
-inline constexpr value_t::value_t(const value_t &other) {
+inline constexpr value::value(const value &other) {
     //small string
     if (other.is_small_string()) {
         //just copy _str
@@ -757,7 +757,7 @@ inline constexpr value_t::value_t(const value_t &other) {
     }
 }
 
-inline constexpr value_t::value_t( value_t &&other) {
+inline constexpr value::value( value &&other) {
     if (other._data.type < undef) {
         std::construct_at(&_str, other._str);
         _str.has_key = 0;
@@ -768,7 +768,7 @@ inline constexpr value_t::value_t( value_t &&other) {
     }
 }
 
-inline constexpr value_t &value_t::operator=(const value_t &other) {
+inline constexpr value &value::operator=(const value &other) {
     if (this != &other) {
         std::destroy_at(this);
         std::construct_at(this, other);
@@ -776,7 +776,7 @@ inline constexpr value_t &value_t::operator=(const value_t &other) {
     return *this;
 }
 
-inline constexpr value_t &value_t::operator=( value_t &&other) {
+inline constexpr value &value::operator=( value &&other) {
     if ( this != &other) {
         std::destroy_at(this);
         std::construct_at(this, std::move(other));
@@ -785,29 +785,29 @@ inline constexpr value_t &value_t::operator=( value_t &&other) {
 }
 
 
-inline constexpr value_t::~value_t() {
+inline constexpr value::~value() {
     visit_dynamic([](auto ptr){
         ptr->release_ref();
     });
 }
 
-inline constexpr std::size_t value_t::size() const {
+inline constexpr std::size_t value::size() const {
     switch (_data.type) {
-        case array: return std::distance(_data.array->begin(),_data.array->end());
-        case object: return std::distance(_data.object->begin(),_data.object->end());
-        case c_object:
-        case c_array: return _data.size;
+        case shared_array: return std::distance(_data.shared_array->begin(),_data.shared_array->end());
+        case shared_object: return std::distance(_data.shared_object->begin(),_data.shared_object->end());
+        case const_object:
+        case const_array: return _data.size;
         case list: return _data.list->size();
         default: return 0;
     }
 }
 
-inline constexpr value_t undefined = type_t::undefined;
+inline constexpr value undefined = type::undefined;
 
 
 
 template<typename Fn>
-inline constexpr auto value_t::visit(Fn &&fn) const {
+inline constexpr decltype(auto) value::visit(Fn &&fn) const {
 
     switch (_data.type) {
         case undef_default:
@@ -815,10 +815,10 @@ inline constexpr auto value_t::visit(Fn &&fn) const {
         case null: return fn(nullptr);
         case string_view: return fn(std::string_view(_data.str_view,_data.size));
         case string: return fn(std::string_view(_data.shared_str->begin(),_data.shared_str->end()));
-        case array: return fn(array_t(_data.array->begin(), _data.array->end()));
-        case object: return fn(object_t(_data.object->begin(), _data.object->end()));
-        case c_array: return fn(array_t(_data.c_array, _data.size));
-        case c_object: return fn(object_t(reinterpret_cast<const key_value_t *>(_data.c_array), _data.size));
+        case shared_array: return fn(array_view(_data.shared_array->begin(), _data.shared_array->end()));
+        case shared_object: return fn(object_view(_data.shared_object->begin(), _data.shared_object->end()));
+        case const_array: return fn(array_view(_data.const_array, _data.size));
+        case const_object: return fn(object_view(_data.const_object, _data.size));
         case list: return fn(_data.list);
         case boolean: return fn(_data.b);
         case vint: return fn(_data.vint);
@@ -842,7 +842,7 @@ inline constexpr auto value_t::visit(Fn &&fn) const {
 template<>
 struct value_conversion_t<std::string_view> {
     constexpr std::string_view operator()(bool b) const {
-        return b?value_t::str_true:value_t::str_false;
+        return b?value::str_true:value::str_false;
     }
     constexpr std::string_view operator()(std::nullptr_t) const {
         return {};
@@ -853,12 +853,12 @@ struct value_conversion_t<std::string_view> {
 template<>
 struct value_conversion_t<std::string> {
     std::string operator()(bool b) const {
-        return std::string(b?value_t::str_true:value_t::str_false);
+        return std::string(b?value::str_true:value::str_false);
     }
-    std::string operator()(std::span<const value_t> span) const {
+    std::string operator()(std::span<const value> span) const {
         return "<array.size="+std::to_string(span.size())+">";
     }
-    std::string operator()(std::span<const key_value_t> span) const {
+    std::string operator()(std::span<const key_value> span) const {
         return "<object.size="+std::to_string(span.size())+">";
     }
     template<number_t T>
@@ -890,7 +890,7 @@ struct value_conversion_t<binary_string_t> {
 
 
 template<typename T>
-inline constexpr T value_t::as() const {
+inline constexpr T value::as() const {
     return visit([&](const auto &item) -> T{
         using X = std::decay_t<decltype(item)>;
         if constexpr(!std::is_null_pointer_v<X> && std::is_constructible_v<T, X>) {
@@ -905,7 +905,7 @@ inline constexpr T value_t::as() const {
 }
 
 template<typename T>
-inline constexpr bool value_t::contains() const {
+inline constexpr bool value::contains() const {
     return visit([&](const auto &item) -> bool{
         using X = std::decay_t<decltype(item)>;
         if constexpr(!std::is_null_pointer_v<X> && std::is_constructible_v<T, X>) {
@@ -921,197 +921,188 @@ inline constexpr bool value_t::contains() const {
 
 namespace _details {
 
-class list_item_t: public value_t {
+class list_item: public value {
 public:
 
-    using value_t::value_t;
+    using value::value;
 
-    constexpr list_item_t(const value_t &val):value_t(val) {}
+    constexpr list_item(const value &val):value(val) {}
 
-    constexpr list_item_t(const std::initializer_list<list_item_t> &list)
-        :value_t(&list) {}
+    constexpr list_item(const std::initializer_list<list_item> &list)
+        :value(&list) {}
 
-    static constexpr value_t build(const value_t &v) {
+    static constexpr value build(const value &v) {
         switch (v._data.type) {
-            case undef_default: return type_t::array;
+            case undef_default: return type::array;
             case list: return build_item(v._data.list);
             default: return v;
         }
     }
 
     template<typename Cont>
-    static constexpr value_t build_item(const Cont *lst) noexcept {
-        if (lst->size()  && std::all_of(lst->begin(), lst->end(), [&](const value_t &el){
+    static constexpr value build_item(const Cont *lst) noexcept {
+        if (lst->size()  && std::all_of(lst->begin(), lst->end(), [&](const value &el){
             auto sz = el.size();
-            return ((sz == 1) | (sz == 2)) && el[0].type() == type_t::string;
+            return ((sz == 1) | (sz == 2)) && el[0].type() == type::string;
         })) {
-            auto *kv = shared_array_t<key_value_t>::create(lst->size(),
+            auto *kv = shared_array_t<key_value>::create(lst->size(),
                     [&](auto beg, auto ) {
-                std::transform(lst->begin(), lst->end(), beg, [&](const value_t &el){
-                    return key_value_t{el[0], build(el[1])};
+                std::transform(lst->begin(), lst->end(), beg, [&](const value &el){
+                    return key_value{el[0], build(el[1])};
                 });
             });
-            sort_object(kv);
-            return value_t(kv);
+            sort_object(kv->begin(), kv->end());
+            return value(kv);
         } else {
             std::size_t needsz = 0;
             for (const auto &x : *lst) if (x._data.type != undef) ++needsz;
-            auto arr = shared_array_t<value_t>::create(needsz,
+            auto arr = shared_array_t<value>::create(needsz,
                     [&](auto beg, auto ) {
                             for (const auto &x : *lst) if (x._data.type != undef) {
                                 *beg++ = build(x);
                             }
             });
-            return value_t(arr);
+            return value(arr);
         }
     }
 };
 
 }
 
-constexpr const value_t &value_t::operator[](std::size_t pos) const {
+constexpr const value &value::operator[](std::size_t pos) const {
     switch (_data.type) {
-        case array: return _data.array->size()<=pos?undefined:_data.array->begin()[pos];
-        case c_array: return _data.size <= pos?undefined:_data.c_array[pos];
-        case object: return _data.object->size()<=pos?undefined:_data.object->begin()[pos].value;
-        case c_object: return _data.size <= pos?undefined:_data.c_array[pos*2+1];
+        case shared_array: return _data.shared_array->size()<=pos?undefined:_data.shared_array->begin()[pos];
+        case const_array: return _data.size <= pos?undefined:_data.const_array[pos];
+        case shared_object: return _data.shared_object->size()<=pos?undefined:_data.shared_object->begin()[pos].value;
+        case const_object: return _data.size <= pos?undefined:_data.const_object[pos].value;
         case list: return _data.list->size() <= pos?undefined: _data.list->begin()[pos];
         default: return undefined;
     }
 }
 
-constexpr const value_t &value_t::operator[](std::string_view val) const {
-    switch (_data.type) {
-        case object: {
-            key_value_t srch = {value_t::create_string_view(val),{}};
-            auto iter = std::lower_bound(_data.object->begin(), _data.object->end(), srch, [](const key_value_t &a, const key_value_t &b){
-                return a.key.as<std::string_view>() < b.key.as<std::string_view>();
+constexpr const value &value::operator[](std::string_view val) const {
+    return visit([&](const auto &x) -> const value & {
+        using T = std::decay_t<decltype(x)>;
+        if constexpr(std::is_same_v<T, object_view>) {
+            auto iter = std::lower_bound(x.begin(), x.end(), val, [](const auto &a, const auto &b){
+                using A = std::decay_t<decltype(a)>;
+                if constexpr(std::is_same_v<A, key_value>) {
+                    return a.key.template as<std::string_view>() < b;
+                } else {
+                    return a < b.key.template as<std::string_view>();
+                }
             });
-            if (iter == _data.object->end() || iter->key != srch.key) return undefined;
+            if (iter == x.end() || iter->key.template as<std::string_view>() != val) return undefined;
             return iter->value;
+        } else {
+            return undefined;
         }
-        case c_object: {
-            value_t srch(val);
-            t_iterator_t<2> beg (_data.c_array);
-            t_iterator_t<2> end (_data.c_array+_data.size*2);
-            auto iter = std::lower_bound(beg, end, srch, [](const value_t &a, const value_t &b){
-                auto as = a.as<std::string_view>();
-                auto bs = b.as<std::string_view>();
-                return as<bs;
-            });
-            if (iter == end || *iter != srch) return undefined;
-            return (&(*iter))[1];
+    });
 
+}
+
+constexpr std::string_view value::key_at(std::size_t pos) const {
+    return visit([&](const auto &x) -> std::string_view {
+        using T = std::decay_t<decltype(x)>;
+        if constexpr(std::is_same_v<T, object_view>) {
+            if (pos >= x.size()) return {};
+            return x[pos].key.template as<std::string_view>();
+        } else {
+            return {};;
         }
-        default: return undefined;
-    }
-
-}
-
-constexpr std::string_view value_t::key_at(std::size_t pos) const {
-    switch (_data.type) {
-        case object: return _data.object->size()<=pos?std::string_view():_data.object->begin()[pos].key.as<std::string_view>();
-        case c_object: return _data.size <= pos?std::string_view():_data.c_array[pos*2].as<std::string_view>();
-        default: return {};
-    }
+    });
 }
 
 
-inline constexpr value_t::value_t(const std::initializer_list<_details::list_item_t> &lst)
-    :value_t(_details::list_item_t::build_item(&lst)) {
+inline constexpr value::value(const std::initializer_list<_details::list_item> &lst)
+    :value(_details::list_item::build_item(&lst)) {
 
 }
 
 
-template<int step>
-inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator++()  {
-    if (is_kv) pos_kv+=step; else pos_val+=step;
+inline constexpr value::iterator_t &value::iterator_t::operator++()  {
+    if (is_kv) pos_kv+=1; else pos_val+=1;
     return *this;
 }
-template<int step>
-inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator--() {
-    if (is_kv) pos_kv-=step; else pos_val-=step;
+inline constexpr value::iterator_t &value::iterator_t::operator--() {
+    if (is_kv) pos_kv-=1; else pos_val-=1;
     return *this;
 }
-template<int step>
-inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator+=(difference_type n) {
-    if (is_kv) pos_kv+=n*step; else pos_val+=n*step;
+inline constexpr value::iterator_t &value::iterator_t::operator+=(difference_type n) {
+    if (is_kv) pos_kv+=n; else pos_val+=n;
     return *this;
 }
-template<int step>
-inline constexpr value_t::t_iterator_t<step> &value_t::t_iterator_t<step>::operator-=(difference_type n){
-    if (is_kv) pos_kv-=n*step; else pos_val-=n*step;
+inline constexpr value::iterator_t &value::iterator_t::operator-=(difference_type n){
+    if (is_kv) pos_kv-=n; else pos_val-=n;
     return *this;
 }
 
-template<int step>
-inline constexpr value_t::t_iterator_t<step> value_t::t_iterator_t<step>::operator+(difference_type n) const {
-    if (is_kv) return t_iterator_t<step>(pos_kv + n*step);
-    else return t_iterator_t<step>(pos_val + n*step);
+inline constexpr value::iterator_t value::iterator_t::operator+(difference_type n) const {
+    if (is_kv) return iterator_t(pos_kv + n);
+    else return iterator_t(pos_val + n);
 }
-template<int step>
-inline constexpr value_t::t_iterator_t<step> value_t::t_iterator_t<step>::operator-(difference_type n) const {
-    if (is_kv) return t_iterator_t<step>(pos_kv - n*step);
-    else return t_iterator_t<step>(pos_val - n*step);
+inline constexpr value::iterator_t value::iterator_t::operator-(difference_type n) const {
+    if (is_kv) return iterator_t(pos_kv - n);
+    else return iterator_t(pos_val - n);
 }
-template<int step>
-inline constexpr std::ptrdiff_t value_t::t_iterator_t<step>::operator-(const t_iterator_t &other) const {
-    if (is_kv) return (pos_kv - other.pos_kv)/step;
-    else return (pos_val - other.pos_val)/step;
+inline constexpr std::ptrdiff_t value::iterator_t::operator-(const iterator_t &other) const {
+    if (is_kv) return (pos_kv - other.pos_kv);
+    else return (pos_val - other.pos_val);
 }
-template<int step>
-inline constexpr const value_t &value_t::t_iterator_t<step>::operator *() const {
+inline constexpr const value &value::iterator_t::operator *() const {
     if (is_kv) return pos_kv->value;
     else return *pos_val;
 }
-template<int step>
-inline constexpr std::string_view value_t::t_iterator_t<step>::key() const {
+inline constexpr std::string_view value::iterator_t::key() const {
     if (is_kv) return pos_kv->key.as<std::string_view>();
     else return {};
 }
-inline constexpr bool value_t::operator==(const value_t &other) const {
+inline constexpr bool value::operator==(const value &other) const {
     if (type() != other.type()) return false;
     switch (type()) {
-        case type_t::null:
-        case type_t::undefined: return true;
-        case type_t::boolean: return as<bool>() == other.as<bool>();
-        case type_t::string:  return as<std::string_view>() == other.as<std::string_view>();
-        case type_t::number:  return as<double>() == other.as<double>();
-        case type_t::array: {
-            array_t arr1 = as<array_t>();
-            array_t arr2 = other.as<array_t>();
+        case type::null:
+        case type::undefined: return true;
+        case type::boolean: return as<bool>() == other.as<bool>();
+        case type::string:  return as<std::string_view>() == other.as<std::string_view>();
+        case type::number:  return as<double>() == other.as<double>();
+        case type::array: {
+            array_view arr1 = as<array_view>();
+            array_view arr2 = other.as<array_view>();
             return std::equal(arr1.begin(), arr1.end(),arr2.begin(), arr2.end());
         }
-        case type_t::object: {
-            object_t obj1 = as<object_t>();
-            object_t obj2 = other.as<object_t>();
+        case type::object: {
+            object_view obj1 = as<object_view>();
+            object_view obj2 = other.as<object_view>();
             return std::equal(obj1.begin(), obj1.end(),obj2.begin(), obj2.end());
         }
         default: return false;
     }
 }
 
-constexpr void value_t::sort_object(shared_array_t<key_value_t> *obj) {
-    std::sort(obj->begin(), obj->end(),[&](const key_value_t &a, const key_value_t &b){
+template<typename Iter>
+constexpr void value::sort_object(Iter beg, Iter end) {
+    std::sort(beg, end,[&](const key_value &a, const key_value &b){
         return a.key.as<std::string_view>() < b.key.as<std::string_view>();
     });
-    for (auto &x: *obj) x.key.mark_has_key();
+    std::for_each(beg, end, [](key_value &x){
+        x.key.mark_has_key();
+    });
 }
 
-inline constexpr value_t::iterator_t value_t::begin() const {
+inline constexpr value::iterator_t value::begin() const {
     return visit([](const auto &x) -> iterator_t{
         using T = std::decay_t<decltype(x)>;
-        if constexpr(std::is_same_v<T, object_t> || std::is_same_v<T, array_t>) {
+        if constexpr(std::is_same_v<T, object_view> || std::is_same_v<T, array_view>) {
             return x.data();
         } else {
             return {};
         }
     });
 }
-inline constexpr value_t::iterator_t value_t::end() const {
+inline constexpr value::iterator_t value::end() const {
     return visit([](const auto &x) -> iterator_t{
         using T = std::decay_t<decltype(x)>;
-        if constexpr(std::is_same_v<T, object_t> || std::is_same_v<T, array_t>) {
+        if constexpr(std::is_same_v<T, object_view> || std::is_same_v<T, array_view>) {
             return x.data()+x.size();
         } else {
             return {};
@@ -1119,129 +1110,116 @@ inline constexpr value_t::iterator_t value_t::end() const {
     });
 }
 
-///Allows to store constexpr structured value
-/**
- * @tparam Elements count of elements. This value can't be calculated by the compiler. If the
- * value is not exact, the compilation fails. However you can let compiler to show correct value
- * in error diagnostic message. If you enter high value, the compiler complaina
- * at 'element_too_large' and shows a number which is correct in this case, so you can
- * update the argument to successful compilation
- *
- * @tparam StringBytes count of bytes for strings. This value can't be calculated by the compiler.
- * value is not exact, the compilation fails. However you can let compiler to show correct value
- * in error diagnostic message. If you enter high value, the compiler complains
- * at 'string_buffer_too_large' and shows a number which is correct in this case, so you can
- * update the argument to successful compilation
- *
- * The class inherits value_t so it can be later used as value_t
- */
-template<std::size_t Elements, std::size_t StringBytes = 1>
-class value_container_t: public value_t {
+
+
+template<unsigned int N>
+class array {
 public:
 
-    constexpr value_container_t(std::initializer_list<_details::list_item_t> items)
-        :value_container_t(value_t(items)){}
-
-    constexpr value_container_t(value_t src) {
-        std::size_t pos = 0;
-        pos = expand(*this, src, pos);
-        if (pos != Elements) {
-            char element_too_large[1];
-            std::ignore = element_too_large[pos];
-        }
-        pos = 0;
-        pos = expand_strings(pos);
-        if (pos+16 < StringBytes) {
-            char string_buffer_too_large[1];
-            std::ignore = string_buffer_too_large[pos];
-
-        }
+    constexpr array(const value (&items)[N]):_is_constexpr(std::is_constant_evaluated()) {
+        std::copy(std::begin(items), std::end(items), std::begin(_items));
     }
+
+    constexpr auto size() const {return N;}
+    constexpr const value * data() const {return _items;}
+    constexpr bool is_constant() const {return _is_constexpr;}
+    ///mark this object temporary - causes creation of temporary json::value without allocation of memory
+    array &temporary_use() {_is_constexpr = true;return *this;}
 
 protected:
+    value _items[N];
+    bool _is_constexpr;
+};
 
-    constexpr std::size_t expand_strings(std::size_t pos) {
-        for (std::size_t i = 0; i < Elements; i++) {
-            if (_elements[i]._data.type == string || _elements[i]._data.type == number_string) {
-                std::string_view s = _elements[i].template as<std::string_view>();
-                const char *c = copy_string(pos, s);
-                if (_elements[i]._data.type == string) {
-                    _elements[i] = value_t(std::string_view(c, s.size()));
-                } else {
-                    _elements[i] = value_t(number_string_t({c, s.size()}));
-                }
-                if (_elements[i]._data.has_key) {
-                    _elements[i].mark_has_key();
-                }
+template<>
+class array<0> {
+public:
 
-            }
-        }
-        return pos;
-    }
+    constexpr array(const std::initializer_list<value> &) {}
+    constexpr array() = default;
 
-    constexpr std::size_t expand(value_t &trg, const value_t &src, std::size_t pos) {
-        switch (src.type()) {
-            case type_t::object: {
-                auto kvlist = src.as<object_t>();
-                std::size_t sz = kvlist.size();
-                value_t *beg = _elements+pos;
-                value_t *iter = beg;
-                pos+=sz*2;
-                for (std::size_t i = 0; i < sz ; ++i) {
-                    pos=expand(*iter, kvlist[i].key, pos);
-                    ++iter;
-                    pos=expand(*iter, kvlist[i].value, pos);
-                    iter->mark_has_key();
-                    ++iter;
-                }
-                trg = value_t(beg, sz, true);
-            } break;
-            case type_t::array: {
-                std::size_t sz = src.size();
-                value_t *beg = _elements+pos;
-                value_t *iter = beg;
-                pos+=sz;
-                for (std::size_t i = 0; i < sz ; ++i) {
-                    pos=expand(*iter, src[i], pos);
-                    ++iter;
-                }
-                trg = value_t(beg, sz, false);
-            } break;
-            case type_t::number:
-            default:
-                trg = src;
-                break;
-        }
-        return pos;
-    }
-
-
-
-
-    constexpr const char *copy_string(std::size_t &pos, std::string_view text) {
-        if (text.empty()) return nullptr;
-        char *beg = _buffer+pos;
-        pos += text.size()+1;
-        auto end = std::copy(text.begin(), text.end(), beg);
-        *end = 0;
-        return beg;
-    }
-
-
-
-    value_t _elements[Elements];
-    char _buffer[StringBytes] = {};
-
+    constexpr auto size() const {return 0;}
+    constexpr const value * data() const {return nullptr;}
+    constexpr bool is_constant() const {return true;}
+    ///mark this object temporary - causes creation of temporary json::value without allocation of memory
+    array &temporary_use() {return *this;}
 
 };
 
+template<unsigned int N>
+class object {
+public:
+
+    constexpr object(const std::pair<std::string_view, value> (&items)[N]):_is_constexpr(std::is_constant_evaluated()) {
+        std::transform(std::begin(items), std::end(items), std::begin(_items), [](const auto &p)->key_value{
+            return {p.first, p.second};
+        });
+        value::sort_object(std::begin(_items), std::end(_items));
+    }
+
+    constexpr auto size() const {return N;}
+    constexpr const key_value * data() const {return _items;}
+    constexpr bool is_constant() const {return _is_constexpr;}
+    ///mark this object temporary - causes creation of temporary json::value without allocation of memory
+    object &temporary_use() {_is_constexpr = true;return *this;}
+
+protected:
+    key_value _items[N];
+    bool _is_constexpr;
+};
+
+template<>
+class object<0> {
+public:
+
+    constexpr object(const std::initializer_list<value> &) {}
+    constexpr object() = default;
+
+    constexpr auto size() const {return 0;}
+    constexpr const value * data() const {return nullptr;}
+    constexpr bool is_constant() const {return true;}
+    ///mark this object temporary - causes creation of temporary json::value without allocation of memory
+    object &temporary_use() {return *this;}
+};
+
+template<unsigned int N>
+array(const value (&v)[N]) -> array<N>;
+array() -> array<0>;
+
+template<unsigned int N>
+object(const std::pair<std::string_view, value> (&)[N]) -> object<N>;
+object()-> object<0>;
+
+template<unsigned int N>
+constexpr value::value(const array<N> &arr)
+    :_data({const_array,0,static_cast<std::uint32_t>(N),{.const_array = arr.data()}}) {
+    if (!arr.is_constant()) {
+        this->_data.type = shared_array;
+        this->_data.shared_array = shared_array_t<value>::create(N, [&](auto iter, auto){
+            std::copy(arr.data(), arr.data()+N, iter);
+        });
+    }
+}
+
+template<unsigned int N>
+constexpr value::value(const object<N> &obj)
+    :_data({const_object,0,static_cast<std::uint32_t>(N),{.const_object = obj.data()}}) {
+    if (!obj.is_constant()) {
+        this->_data.type = shared_object;
+        this->_data.shared_object= shared_array_t<key_value>::create(N, [&](auto iter, auto){
+            std::copy(obj.data(), obj.data()+N, iter);
+        });
+    }
+}
+
+
 template<typename ConflictSolver>
-inline value_t value_t::merge_objects(const value_t &val,ConflictSolver &&fn) const {
-    if (val.type() != type_t::object || type() != type_t::object) return val;
-    const object_t &a = as<object_t>();
-    const object_t &b = val.as<object_t>();
-    const key_value_t *resbeg, *resend;
-    auto res = shared_array_t<key_value_t>::create(size()+val.size(), [&](auto beg, auto){
+inline value value::merge_objects(const value &val,ConflictSolver &&fn) const {
+    if (val.type() != type::object || type() != type::object) return val;
+    const object_view &a = as<object_view>();
+    const object_view &b = val.as<object_view>();
+    const key_value *resbeg, *resend;
+    auto res = shared_array_t<key_value>::create(size()+val.size(), [&](auto beg, auto){
         resbeg = beg;
         auto ia = a.begin();
         auto ea = a.end();
@@ -1279,43 +1257,32 @@ inline value_t value_t::merge_objects(const value_t &val,ConflictSolver &&fn) co
         resend = beg;
     });
     res->trunc(resend - resbeg);
-    return value_t(res);
+    return value(res);
 }
 
-inline value_t value_t::merge_objects(const value_t &val) const {
-    return merge_objects(val, [](const value_t &, const value_t &b) {
+inline value value::merge_objects(const value &val) const {
+    return merge_objects(val, [](const value &, const value &b) {
         return b;
     });
 }
 
-inline value_t value_t::merge_objects_recursive(const value_t &val) const {
-    return merge_objects(val, [](const value_t &a, const value_t &b) {
+inline value value::merge_objects_recursive(const value &val) const {
+    return merge_objects(val, [](const value &a, const value &b) {
         return a.merge_objects_recursive(b);
     });
 }
 
 
 
-inline void value_t::set(std::string_view key, value_t value) {
+inline void value::set(std::string_view key, value value) {
     set({{key, value}});
 
 }
 
 template<int N>
-void value_t::set(const std::pair<std::string_view, value_t> (&list)[N]) {
-    if constexpr(N <= 0) return ;
-    const std::pair<std::string_view , value_t> * sortindex[N];
-    int i = 0;
-    for (const auto &x: list) sortindex[i++] = &x;
-    std::sort(std::begin(sortindex), std::end(sortindex), [&](const auto *a, const auto *b){
-        return a->first < b->first;
-    });
-    value_t data[N * 2];
-    for (int i = 0; i < N; ++i) {
-        data[i*2] = sortindex[i]->first;
-        data[i*2+1] = sortindex[i]->second;
-    }
-    value_t obj(data, N, true);
+void value::set(const std::pair<std::string_view, value> (&list)[N]) {
+    object<N> obj(list);
+    obj.temporary_use();
     (*this) = this->merge_objects(obj);
 }
 
@@ -1335,12 +1302,10 @@ inline binary_string_t value_conversion_t<binary_string_t>::operator()(const std
 
 
 //clang complains for undefined function
-template value_t _details::list_item_t::build_item<std::span<value_t const> >(std::span<value_t const> const*) noexcept;
+template value _details::list_item::build_item<std::span<value const> >(std::span<value const> const*) noexcept;
 //clang complains for undefined function
-template std::string json20::value_t::as<std::string>() const;
+template std::string json20::value::as<std::string>() const;
 
-template class value_t::t_iterator_t<1>;
-template class value_t::t_iterator_t<2>;;
 
 
 

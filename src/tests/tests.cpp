@@ -56,7 +56,7 @@ constexpr bool validate_number_4 = []{
 constexpr bool parse_json_0 = []{
         const std::string_view txt = R"json("aa")json";
         parser_t p;
-        value_t v;
+        value v;
         p.parse(txt.begin(), txt.end(),v);
         return true;
 }();
@@ -67,7 +67,7 @@ constexpr bool parse_json_0 = []{
 constexpr bool parse_json_1 = []{
         const std::string_view txt = "[1,2,true,{\"key\":null,\"key2\":\"world\"},\"hello\"]extra";
         parser_t p;
-        value_t v;
+        value v;
         auto iter = p.parse(txt.begin(), txt.end(), v);
         auto u = std::string_view(iter, txt.end());
         check(u == "extra");
@@ -75,7 +75,7 @@ constexpr bool parse_json_1 = []{
         check(v[1].as<int>() == 2);
         check(v[2].as<bool>() == true);
         check(v[4].as<std::string_view>() == "hello");
-        check(v[3].type() == type_t::object);
+        check(v[3].type() == type::object);
         check(v[3]["key"] == nullptr);
         check(v[3]["key2"].as<std::string_view>() == "world");
         check(!v[3]["test"]);
@@ -98,19 +98,28 @@ constexpr std::string_view test_json = R"json(
    "stav":true,
    "stav2":false,
    "nullval":null,
-   "text_contains_quotes":"I say \"hello world\"!"
+   "text_contains_quotes":"I say \"hello world\"!",
+   "smajlik":"ahoj \uD83D\uDE00"
 }
 )json";
 
 
+constexpr bool test_parse = []{
+        auto json = value::from_json(test_json);
+        check(json["abc"].as<int>() == 123);
+        check(json["xyz"].as<double>() == 42.42);
+        check(json["pole"][0].as<int>() == 1);
+        check(json["text_contains_quotes"].as<std::string_view>() == "I say \"hello world\"!");
+        check(json["smajlik"].as<std::string_view>() == "ahoj 😀");
 
-constexpr auto test_json_parsed = []{
-        return json20::value_container_t<31,89>(value_t::from_json(test_json));
+        return true;
 }();
+
+
 /*
 
 constexpr auto test_json_bin = []{
-        auto json = value_t::from_json(test_json);
+        auto json = value::from_json(test_json);
         serializer_t<format_t::binary> sr(json);
         parser_t<format_t::binary> pr;
         std::string_view txt = sr.read();
@@ -158,18 +167,43 @@ constexpr unsigned char example_binary_data_decoded[] = {'l','i','g','h','t',' '
 constexpr auto test_binary_data = check(static_cast<binary_string_view_t>(example_binary_data) == binary_string_view_t(example_binary_data_decoded, sizeof(example_binary_data_decoded)));
 
 
+constexpr array test_array ({"100",45,false, nullptr});
+constexpr array test_array2 ({test_array, "cus"});
+
+constexpr value test_array_val = test_array2;
+
+constexpr object test_obj_snippet ( {
+        {"axy",10},
+        {"zsee",85},
+        {"sub_test", test_array},
+        {"sub_test2", test_array2}
+});
+
+constexpr value test_obj = test_obj_snippet;
+
+constexpr bool test_constexpr_obj = []{
+        check(test_obj["axy"].as<int>() == 10);
+        check(test_obj["zsee"].as<int>() == 85);
+        check(test_obj["subtest"][0].as<std::string_view>() == "100");
+        check(test_obj["subtest"][1].as<int>() == 45);
+        check(test_obj["subtest2"][0][1].as<int>() == 45);
+
+
+        return true;
+};
+
 /*
 
 constexpr bool parse_json_2 = []{
-        const value_t &v = test_json_parsed;
+        const value &v = test_json_parsed;
         check(v["abc"].as<int>() == 123);
         check(v["xyz"].as<int>() == 42);
         check(v["pole"].size() == 3);
-        check(v["2dpole"].type() == type_t::array);
+        check(v["2dpole"].type() == type::array);
         check(v["stav"].as<int>() == 1);
         check(v["stav"].as<std::string_view>() == "true");
         check(v["nullval"] == nullptr);
-        check(v["2dpole"].type() == type_t::array);
+        check(v["2dpole"].type() == type::array);
         check(v["2dpole"][1][1].as<int>() == 5);
         check(!v["2dpole"][1][7]);
         check(!v["2dpole"]["xyz"]);
