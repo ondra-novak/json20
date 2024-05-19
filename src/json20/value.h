@@ -4,11 +4,11 @@
 #include "shared_array.h"
 #include "base64.h"
 #include <span>
-#include <tuple>
 #include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace json20 {
 
@@ -178,7 +178,7 @@ public:
      * @param number specify true if the buffer is number as string
      */
 
-    constexpr value(shared_array_t<char> *str, bool number):_data{number?number_string:string, 0, 0, {.shared_str = str}} {}
+    constexpr value(shared_array_t<char> *str, bool number):_data{number?num_string:string, 0, 0, {.shared_str = str}} {}
 
     ///construct binary string from shared string buffer
     /**
@@ -239,9 +239,9 @@ public:
      * copies the string into the object (uses small string buffer, or allocates the buffer)
      *
      */
-    constexpr value(const number_string_t &text) {
+    constexpr value(const number_string &text) {
         if (std::is_constant_evaluated()) {
-            std::construct_at(&_data, Data{number_string_view, 0,static_cast<std::uint32_t>(text.size()), {text.data()}});
+            std::construct_at(&_data, Data{num_string_view, 0,static_cast<std::uint32_t>(text.size()), {text.data()}});
         } else {
             if (text.size() < 16) {
                 std::construct_at(&_str);
@@ -249,7 +249,7 @@ public:
                 _str.isnum = 1;
                 std::copy(text.begin(), text.end(), _str.str);
             } else {
-                _data = {number_string,0, 0,{.shared_str = shared_array_t<char>::create(text.size(),[&](char *beg, char *){
+                _data = {num_string,0, 0,{.shared_str = shared_array_t<char>::create(text.size(),[&](char *beg, char *){
                     std::copy(text.begin(), text.end(), beg);
                 })}};
             }
@@ -316,7 +316,7 @@ public:
      * is undefined, the function is called with undefined_t. For null the function
      * receives std::nullptr_t. If the value contains a string, the function is called
      * with std::string_view. If the value is number_string, the function is called
-     * with number_string_t. If the value is array or object, the function is called
+     * with number_string. If the value is array or object, the function is called
      * with array_t or object_t.
      */
     template<typename Fn>
@@ -433,8 +433,8 @@ public:
             case vullong:
             case dbl: return type::number;
             case list: return type::array;
-            case number_string_view:
-            case number_string: return type::number;
+            case num_string_view:
+            case num_string: return type::number;
             default:
                 return _str.isnum?type::number: type::string;
         }
@@ -523,6 +523,20 @@ public:
      * @note requires serializer.h
      */
     std::string to_json() const;
+
+
+    ///Convert value to JSON string
+    /**
+     * @param buffer a vector used to store actual string data
+     * @return string view containing the JSON string
+     *
+     * @note the buffer is not cleared, so you can use this to append a data
+     * to it, however the return value contains just generated JSON
+     * @note requires serializer.h
+     * @note it is constexpr
+     */
+    constexpr std::string_view to_json(std::vector<char> &buffer) const;
+
     ///Parse string as JSON
     /**
      * @param text string contains JSON
@@ -610,9 +624,9 @@ protected:
         ///pointer to initializer list (internal)
         list,
         ///string (allocated) as number
-        number_string,
+        num_string,
         ///string view as number
-        number_string_view,
+        num_string_view,
         ///binary string
         binary_string,
         ///binary string view
@@ -702,7 +716,7 @@ protected:
     template<typename Fn>
     constexpr void visit_dynamic(Fn &&fn) {
         switch(_data.type) {
-            case number_string:
+            case num_string:
             case string: fn(_data.shared_str);break;
             case binary_string: fn(_data.shared_bin_str);break;
             case shared_array: fn(_data.shared_array);break;
@@ -828,12 +842,12 @@ inline constexpr decltype(auto) value::visit(Fn &&fn) const {
         case vllong: return fn(_data.vllong);
         case vullong: return fn(_data.vullong);
         case dbl: return fn(_data.d);
-        case number_string_view: return fn(number_string_t({_data.str_view,_data.size}));
-        case number_string: return fn(number_string_t({_data.shared_str->begin(),_data.shared_str->end()}));
+        case num_string_view: return fn(number_string({_data.str_view,_data.size}));
+        case num_string: return fn(number_string({_data.shared_str->begin(),_data.shared_str->end()}));
         case binary_string_view: return fn(binary_string_view_t({_data.bin_str_view,_data.size}));
         case binary_string: return fn(binary_string_view_t({_data.shared_bin_str->begin(),_data.shared_bin_str->end()}));
         default:
-            return _str.isnum?fn(number_string_t({_str.str, _str.size})):fn(std::string_view(_str.str, _str.size));
+            return _str.isnum?fn(number_string({_str.str, _str.size})):fn(std::string_view(_str.str, _str.size));
     }
 
 }
@@ -875,7 +889,7 @@ struct value_conversion_t<T>{
         return T();
     }
     constexpr T operator()(const std::string_view &v) const {
-        number_string_t nv(v);
+        number_string nv(v);
         return T(nv);
     }
 };

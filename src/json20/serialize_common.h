@@ -14,59 +14,64 @@ enum class format_t {
 
 /* ***************** TLV *************************************
  *
- * Tag = <tttttlll>
- *    - 5bit type
- *    - 3bit bytes of length or value - 1 /depend on type
+ * Tag = <ttttnnnn>
+ *    - 4bit type
+ *    - 4bit a unsigned integer number with various meaning
+ *
+ * The number can be extended up to 8-bytes unsigned long
+ *
+ * for number 0..7, the number is directly stored.
+ *    Example: tttt0010: number = 3
+ *             tttt0000: number = 0
+ *             tttt0111: number = 7
+ *
+ * for number above 7, the n contains count of additional bytes -7.
+ *    Example: tttt1000: 1 byte follows which contains a number (8-7=1)
+ *             tttt1010: 3 bytes follows                        (10-7=3)
+ *             tttt1111: 8 bytes follows                        (15-7=8)
+ *
+ *    Example of number:
+ *             tttt1111 E8 6A 23 4A 28 CQ EB A1: number = A1EBC1284A236AE8
+ *             tttt1000 41: number is 0x41
+ *             tttt1001 AA 55: number is 55AA
+ *             tttt1000 03: number is 0x03, however it should be written as tttt0011
  *
  *
- * unsigned numbers are big endian
- * double is bit_cast to unsigned number in big endian
  *
- * 0x0  sync- empty byte, skipped
- * 0x08 undefined       00001000
- * 0x10 string          00010lll <length> <text>  (l - bytes of length -1 )
- * 0x18 binary string   00011lll <length> <text>  (l - bytes of length -1 )
- * 0x20 positive number 00100lll <value>  (l - bytes of value)
- * 0x28 negative number 00101lll <value>  (l - bytes of value)
- * 0x30 array           00110lll <count of items> (l - bytes of count - 1)
- * 0x38 object          00111lll <count of pairs> (l - bytes of count - 1)
- * 0x40 double          01000000 <8 bytes of double>
- * 0x48 num.string      01001lll <length> <text>  (l - bytes of length -1 )
- * 0x50 boolean         0101000b b - boolean value
- * 0x58 null            01011000
- *
- * 0x38 0x07 0x10 0x06 0x64 0x65 0x6c 0x65 0x74 0x65 0x08
- *  |     |    |    |    |                            +----- null
- *  |     |    |    |    +------ "delete"
- *  |     |    |    +-------6 bytes
- *  |     |    +------- string, 1 byte for length
- *  |     +--------7 pairs
- *  +----- object, 1 byte for length
- *
+ * 0x0  signle tags (each tag is signle, defines specified action)
+ *          0x0 - sync - NOP, skip byte
+ *          0x1 - undefined
+ *          0x2 - null value.
+ *          0x3 - false value
+ *          0x4 - true value
+ * 0xB - follows 4 bytes containing float number in little endian order (only
+ * 0xF - follows 8 bytes containing double number in little endian order
+ * 0x10 - string: number=length, follows characters up to length
+ * 0x20 - binary string: number=length, follows bytes up to length
+ * 0x30 - number string: number=length, follows characters up to length (number as string)
+ * 0x40 - positive number: number = value (+value)
+ * 0x50 - negative number: number = value (-value)
+ * 0x60 - array: number = count - follows items
+ * 0x70 - object: number = count - follows pairs key-value (key is encoded as 0x10)
+ * 0x80-0xFF - reserved for future use
  */
 
-enum class bin_element_t:char {
-    sync = 0x0,       /**< sync */
-    undefined = 0x08, /**< undefined */
-    string = 0x10,    /**< string */
-    bin_string = 0x18,/**< bin_string */
-    pos_number = 0x20,/**< pos_number */
-    neg_number = 0x28,/**< neg_number */
-    array = 0x30,     /**< array */
-    object = 0x38,    /**< object */
-    num_double = 0x40,/**< num_double */
-    num_string = 0x48,/**< num_string */
-    boolean = 0x50,   /**< boolean */
-    null = 0x58,      /**< null */
+enum class bin_element_t:unsigned char {
+    sync = 0x0,             //just NOP, ignored, no element is emited
+    undefined = 0x1,        //emit undefined
+    null = 0x2,             //emit null
+    bool_false = 0x3,       //emit boolean false
+    bool_true = 0x4,        //emit boolean true
+    num_double =0xF,        //8 bytes of double follows litte endian
+    string = 0x10,          //0x1<size...> string
+    bin_string = 0x20,      //0x2<size...> string number
+    num_string = 0x30,      //0x3<size...> binary string
+    pos_number = 0x40,      //0x4<number...> positive number
+    neg_number = 0x50,      //0x5<number...> negative number
+    array = 0x60,           //0x6<count...> (items)
+    object = 0x70           //0x6<count...> (key, value)
 };
 
-constexpr char encode_tag(bin_element_t el, unsigned int size = 0) {
-    return static_cast<char>(el) | static_cast<char>(size);
-}
-
-constexpr std::pair<bin_element_t, unsigned int> decode_tag(char tag) {
-    return {static_cast<bin_element_t>(tag & ~0x7), tag & 0x7};
-}
 
 
 

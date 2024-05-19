@@ -27,7 +27,7 @@ constexpr bool print_value_fail(T val) {
 }
 
 constexpr bool validate_number_1 = []{
-    number_string_t a("1.2e3");
+    number_string a("1.2e3");
     double v = a.parse();
     check(v > 1.199999e3);
     check(v < 1.200001e3);
@@ -36,19 +36,19 @@ constexpr bool validate_number_1 = []{
 }();
 
 constexpr bool validate_number_2 = []{
-    number_string_t a("1.2e3x");
+    number_string a("1.2e3x");
     check(!a.validate());
     return true;
 }();
 
 constexpr bool validate_number_3 = []{
-    number_string_t a("-12514540654065019080465341874980469408900498403103510609879");
+    number_string a("-12514540654065019080465341874980469408900498403103510609879");
     check(a.validate());
     return true;
 }();
 
 constexpr bool validate_number_4 = []{
-    number_string_t a("hello");
+    number_string a("hello");
     check(!a.validate());
     return true;
 }();
@@ -114,6 +114,7 @@ constexpr bool test_parse = []{
 
         return true;
 }();
+
 
 
 /*
@@ -191,6 +192,24 @@ constexpr bool test_constexpr_obj = []{
 
         return true;
 };
+
+constexpr bool serialize_json_0 = []{
+        std::vector<char> buff;
+        value v = 3.141592;
+        check(v.to_json(buff) == "3.141592");
+        v = 0.00000012345;
+        check(v.to_json(buff) == "1.2345e-7");
+        v = -125.368e9;
+        check(v.to_json(buff) == "-1.25368e11");
+        v = 0;
+        check(v.to_json(buff) == "0");
+        v = std::numeric_limits<double>::infinity();
+        check(v.to_json(buff) == "\"+\xe2\x88\x9e\"");
+        v = -std::numeric_limits<double>::infinity();
+        check(v.to_json(buff) == "\"-\xe2\x88\x9e\"");
+        return true;
+}();
+
 
 /*
 

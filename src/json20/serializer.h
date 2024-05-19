@@ -20,6 +20,17 @@ public:
     }
 
 
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary(const value &v, Target &&target) {
+
+        v.visit([&](const auto &data){
+            serialize_binary_item(data, target);
+        });
+
+    }
+
+
+
 
 
 protected:
@@ -71,13 +82,8 @@ protected:
         target(std::string_view(_buffer.data(), _buffer.size()));
     }
 
-    template<std::invocable<std::string_view> Target>
-    constexpr void serialize_item(const bool &v, Target &target) {
-        target(v?"true":"false");
-    }
-
     template<bool minus, typename V>
-    std::vector<char>::iterator recurse_number_to_str(V val, int sz = 0) {
+    constexpr std::vector<char>::iterator recurse_number_to_str(V val, int sz = 0) {
         if (val) {
             auto iter = recurse_number_to_str<minus>(val/10, sz+1);
             *iter = (val%10) + '0';
@@ -96,6 +102,81 @@ protected:
 
         }
     }
+
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const double &val, Target &target) {
+        constexpr double min_frac_to_render = 0.00001;
+
+        if (is_neg_infinity(val)) {
+            serialize_item(number_string::minus_infinity, target);
+            return;
+        }
+        if (is_pos_infinity(val)) {
+            serialize_item(number_string::plus_infinity, target);
+            return;
+        }
+        if (is_nan(val)) {
+            serialize_item(nullptr,target);
+            return;
+        }
+
+        double v;
+        if (val < 0) {
+            target("-");
+            v =  -val;
+        } else {
+            v = val;
+        }
+
+        if (v < std::numeric_limits<double>::min()) {
+            target("0");
+            return;
+        }
+
+
+        int exponent = static_cast<int>(number_string::get_exponent(v));
+        if (exponent > 8 || exponent < -2) {
+            v = v / number_string::pow10(exponent);
+        } else {
+            exponent = 0;
+        }
+
+        v+=std::numeric_limits<double>::epsilon();
+
+        unsigned long intp = static_cast<unsigned long>(v);
+        double fracp = v - intp;
+        if (fracp >= (1.0 - min_frac_to_render)) {
+            intp++;
+            fracp = 0;
+        }
+
+        recurse_number_to_str<false>(intp);
+        target(std::string_view(_buffer.data(), _buffer.size()));
+
+        if (fracp >= min_frac_to_render) {
+            _buffer.clear();
+            _buffer.push_back('.');
+            while (fracp >= min_frac_to_render && fracp <= (1.0-min_frac_to_render)) {
+                fracp *= 10;
+                unsigned int vv = static_cast<int>(fracp);
+                fracp -= vv;
+                _buffer.push_back(static_cast<char>(vv) + '0');
+            }
+            target(std::string_view(_buffer.data(), _buffer.size()));
+        }
+        if (exponent) {
+            target("e");
+            serialize_item(exponent, target);
+        }
+
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const bool &v, Target &target) {
+        target(v?"true":"false");
+    }
+
 
     template<signed_integer_number_t V, std::invocable<std::string_view> Target>
     constexpr void serialize_item(const V &v, Target &target) {
@@ -121,7 +202,7 @@ protected:
     }
 
     template<std::invocable<std::string_view> Target>
-    constexpr void serialize_item(const number_string_t &v, Target &target) {
+    constexpr void serialize_item(const number_string &v, Target &target) {
         target(std::string_view(v));
     }
 
@@ -182,6 +263,103 @@ protected:
 
     }
 
+    template<std::invocable<std::string_view> Target, unsigned_integer_number_t Num>
+    static void make_tlv_tag(bin_element_t tag, Num l,Target &target) {
+        if (l < static_cast<Num>(8)) {
+            char b = static_cast<char>(tag) | static_cast<char>(l);
+            target(std::string_view(&b,1));
+        } else {
+            char buff[10];
+            char *p = buff;
+            auto c = l;
+            unsigned char b = 0;
+            while ((c >>= 8)) ++b;
+            *p = static_cast<char>(tag) | static_cast<char>(b+8);
+            ++p;
+            for (unsigned char i = 0; i <= b; ++i) {
+                *p++ = static_cast<char>(l & 0xFF);
+                l >>=8;
+            }
+            target(std::string_view(buff, p-buff));
+        }
+    }
+
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const std::string_view &str, Target &target) {
+        make_tlv_tag(bin_element_t::string, str.size(), target);
+        target(str);
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const bool &v, Target &target) {
+        char b = static_cast<char>(v?bin_element_t::bool_true:bin_element_t::bool_false);
+        target(std::string_view(&b,1));
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const double &v, Target &target) {
+        std::uint64_t bin_val = std::bit_cast<std::uint64_t>(v);
+        char data[10];
+        char *p = data;
+        *p++ = static_cast<char>(bin_element_t::num_double);
+        for (unsigned int i = 0; i < 8; ++i) {
+            *p++ = static_cast<char>(bin_val & 0xFF);
+            bin_val >>=8;
+        }
+        target(std::string_view(data, p - data));
+    }
+
+    template<signed_integer_number_t V, std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const V &v, Target &target) {
+        if (v < 0) {
+            make_tlv_tag(bin_element_t::neg_number, static_cast<std::make_unsigned_t<V> >(-v), target);
+        } else {
+            make_tlv_tag(bin_element_t::pos_number, static_cast<std::make_unsigned_t<V> >(v), target);
+        }
+    }
+
+
+    template<unsigned_integer_number_t V, std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const V &v, Target &target) {
+        make_tlv_tag(bin_element_t::pos_number, v, target);
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const number_string &v, Target &target) {
+        make_tlv_tag(bin_element_t::num_string, v.size(), target);
+        target(v);
+    }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const std::nullptr_t &, Target &target) {
+        char b = static_cast<char>(bin_element_t::null);
+        target(std::string_view(&b,1));
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const undefined_t &, Target &target) {
+        char b = static_cast<char>(bin_element_t::undefined);
+        target(std::string_view(&b,1));
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const binary_string_view_t &data, Target &target) {
+        make_tlv_tag(bin_element_t::bin_string, data.size(), target);
+        target(data);
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const array_view &data, Target &target) {
+        make_tlv_tag(bin_element_t::array, data.size(), target);
+        for (const value &v: data) {
+            serialize_binary(v, target);
+        }
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const object_view &data, Target &target) {
+        make_tlv_tag(bin_element_t::object, data.size(), target);
+        for (const key_value &v: data) {
+            serialize_binary(v.key, target);
+            serialize_binary(v.value, target);
+        }
+    }
 
 
 
@@ -196,6 +374,14 @@ inline std::string value::to_json() const {
     return res;
 }
 
+inline constexpr std::string_view value::to_json(std::vector<char> &buffer) const {
+    std::size_t start = buffer.size();
+    serializer_t srl;
+    srl.serialize(*this, [&](const std::string_view &a){
+        buffer.insert(buffer.end(), a.begin(), a.end());
+    });
+    return std::string_view(buffer.data()+start, buffer.size() - start);
+}
 
 #if 0
 
@@ -228,7 +414,7 @@ protected:
     constexpr void render(const array_view &arr);
     constexpr void render(const object_view &arr);
     constexpr void render(const std::string_view &str);
-    constexpr void render(const number_string_t &str);
+    constexpr void render(const number_string &str);
     constexpr void render(const binary_string_view_t &str);
     constexpr void render(const undefined_t &);
     constexpr void render(const std::nullptr_t &);
@@ -468,7 +654,7 @@ inline constexpr void serializer_t<format>::render(const std::string_view &str) 
 }
 
 template<format_t format>
-inline constexpr void serializer_t<format>::render(const number_string_t &str) {
+inline constexpr void serializer_t<format>::render(const number_string &str) {
     if constexpr(format == format_t::text) {
         encode_str(str, std::back_inserter(_buffer));
     } else {
@@ -525,11 +711,11 @@ inline constexpr void serializer_t<format>::render(const double & val) {
         constexpr double min_frac_to_render = 0.0001;
 
         if (is_neg_infinity(val)) {
-            render(number_string_t::minus_infinity);
+            render(number_string::minus_infinity);
             return;
         }
         if (is_pos_infinity(val)) {
-            render(number_string_t::plus_infinity);
+            render(number_string::plus_infinity);
             return;
         }
         if (is_nan(val)) {
@@ -551,9 +737,9 @@ inline constexpr void serializer_t<format>::render(const double & val) {
         }
 
 
-        int exponent = static_cast<int>(number_string_t::get_exponent(v));
+        int exponent = static_cast<int>(number_string::get_exponent(v));
         if (exponent > 8 || exponent < -2) {
-            v = v / number_string_t::pow10(exponent);
+            v = v / number_string::pow10(exponent);
         } else {
             exponent = 0;
         }

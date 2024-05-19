@@ -123,7 +123,8 @@ int main() {
             {"delete", json20::type::undefined},
             {"flags",{{1.258, 12.148e52}}},
             {"array_test",json20::array({1,2,3})},
-            {"_text_contains_quotes","I say \"hello world\"!"},
+            {"text_contains_quotes","I say \"hello world\"!"},
+            {"_real",3.141592},
         };
 
     json20::print({1,2,3,{},4,5,6});
@@ -136,8 +137,8 @@ int main() {
     k = vtest[1].key();
     std::cout << k << std::endl;
     std::cout << sizeof(json20::value) << std::endl;
-    json20::value vnum(json20::number_string_t("1.2345"));
-    json20::value vnum2(json20::number_string_t("-123.4545285752485087804896e+03"));
+    json20::value vnum(json20::number_string("1.2345"));
+    json20::value vnum2(json20::number_string("-123.4545285752485087804896e+03"));
     std::cout << vnum.as<double>() << std::endl;
     std::cout << vnum2.as<double>() << std::endl;
     std::cout << static_cast<int>(vnum.type()) << std::endl;

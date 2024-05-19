@@ -298,7 +298,7 @@ constexpr Iter parser_t::parse_number(Iter iter, Iter end, value &out) {
         while (is_digit(*chk)) ++chk;
     }
     auto sz = std::distance(_str_buff.begin(), chk);
-    auto nstr =  number_string_t(std::string_view(_str_buff.data(), sz));
+    auto nstr =  number_string(std::string_view(_str_buff.data(), sz));
     if (std::is_constant_evaluated()) {
         if (nstr.is_floating()) {
             out = value(shared_array_t<char>::create(nstr.size(), [&](auto from, auto){

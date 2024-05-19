@@ -91,13 +91,13 @@ inline constexpr bool is_pos_infinity(double b) {
  * This increases speed of parsing and reduces possibility of loosing accuracy of
  * numbers when source is parsed and then serialized back.
  *
- * You can also use class number_string_t to put numbers to the JSON in optimaly
+ * You can also use class number_string to put numbers to the JSON in optimaly
  * crafted accuracy
  *
  */
-class number_string_t: public std::string_view {
+class number_string: public std::string_view {
 public:
-    constexpr number_string_t(const std::string_view &x):std::string_view(x) {}
+    constexpr number_string(const std::string_view &x):std::string_view(x) {}
 
     constexpr bool validate() const;
     constexpr bool is_floating() const {
@@ -141,8 +141,10 @@ public:
 
 
 
-inline constexpr double number_string_t::parse() const {
+inline constexpr double number_string::parse() const {
     std::string_view tmp = *this;
+    if (tmp == plus_infinity) return std::numeric_limits<double>::infinity();
+    if (tmp == minus_infinity) return -std::numeric_limits<double>::infinity();
     double mult = 1.0;
     if (tmp.front() == '+') {
         tmp = tmp.substr(1);
@@ -183,7 +185,7 @@ inline constexpr double number_string_t::parse() const {
 }
 
 template<signed_integer_number_t T>
-inline constexpr std::optional<T> number_string_t::parse_int(std::string_view text) {
+inline constexpr std::optional<T> number_string::parse_int(std::string_view text) {
     if (text == plus_infinity) return std::numeric_limits<T>::max();
     if (text == minus_infinity) return std::numeric_limits<T>::min();
     bool neg = false;
@@ -204,7 +206,7 @@ inline constexpr std::optional<T> number_string_t::parse_int(std::string_view te
 }
 
 template<unsigned_integer_number_t T>
-inline constexpr std::optional<T> number_string_t::parse_uint(std::string_view text) {
+inline constexpr std::optional<T> number_string::parse_uint(std::string_view text) {
     if (text == plus_infinity) return std::numeric_limits<T>::max();
     if (text == minus_infinity) return std::numeric_limits<T>::min();
     if (text.front() == '+') {
@@ -221,29 +223,29 @@ inline constexpr std::optional<T> number_string_t::parse_uint(std::string_view t
 }
 
 template<optional_signed_integer_number_t T>
-inline constexpr T number_string_t::parse_int() const {
+inline constexpr T number_string::parse_int() const {
     if (empty()) return T();
     if (is_floating()) return static_cast<T>(parse());
     auto r = parse_int<T>(*this);
     return r.has_value()?*r:T();
 }
 template<optional_unsigned_integer_number_t T>
-inline constexpr T number_string_t::parse_uint() const {
+inline constexpr T number_string::parse_uint() const {
     if (empty()) return T();
     if (is_floating()) return static_cast<T>(parse());
     auto r = parse_uint<T>(*this);
     return r.has_value()?*r:T();
 }
 
-constexpr number_string_t::operator double() const {return parse();}
-constexpr number_string_t::operator int() const {return static_cast<int>(parse_int<int>());}
-constexpr number_string_t::operator long() const {return static_cast<long>(parse_int<long>());}
-constexpr number_string_t::operator long long() const {return static_cast<long long>(parse_int<long long>());}
-constexpr number_string_t::operator unsigned int() const {return static_cast<unsigned int>(parse_uint<unsigned int>());}
-constexpr number_string_t::operator unsigned long() const {return static_cast<unsigned long>(parse_uint<unsigned long>());}
-constexpr number_string_t::operator unsigned long long() const {return static_cast<unsigned long long>(parse_uint<unsigned long long>());}
+constexpr number_string::operator double() const {return parse();}
+constexpr number_string::operator int() const {return static_cast<int>(parse_int<int>());}
+constexpr number_string::operator long() const {return static_cast<long>(parse_int<long>());}
+constexpr number_string::operator long long() const {return static_cast<long long>(parse_int<long long>());}
+constexpr number_string::operator unsigned int() const {return static_cast<unsigned int>(parse_uint<unsigned int>());}
+constexpr number_string::operator unsigned long() const {return static_cast<unsigned long>(parse_uint<unsigned long>());}
+constexpr number_string::operator unsigned long long() const {return static_cast<unsigned long long>(parse_uint<unsigned long long>());}
 
-inline constexpr bool number_string_t::validate() const {
+inline constexpr bool number_string::validate() const {
     return !is_nan(parse());
 }
 
