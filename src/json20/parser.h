@@ -59,6 +59,9 @@ public:
     constexpr Iter parse(Iter iter, Iter end,  value &out);
 
 
+    template<std::forward_iterator Iter>
+    constexpr Iter parse_binary(Iter iter, Iter end, value &out);
+
 
 protected:
 
@@ -399,6 +402,89 @@ constexpr value value::from_json(const std::string_view &text) {
     value out;
     pr.parse(text.begin(), text.end(), out);
     return out;
+}
+
+template<std::forward_iterator Iter>
+constexpr Iter parser_t::parse_binary(Iter iter, Iter end, value &out) {
+    if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
+    char tagbyte = *iter;
+    ++iter;
+    std::uint64_t len;
+    bin_element_t tag = static_cast<bin_element_t>(tagbyte & 0xF0);
+    switch (tag) {
+        case bin_element_t::sync:
+            switch (static_cast<bin_element_t>(tagbyte)) {
+                case bin_element_t::sync:
+                    return parse_binary(iter, end, out);
+                case bin_element_t::undefined:
+                    out = undefined;
+                    break;
+                case bin_element_t::null:
+                    out = nullptr;
+                    break;
+                case bin_element_t::bool_true:
+                    out = true;
+                    break;
+                case bin_element_t::bool_false:
+                    out = false;
+                    break;
+                case bin_element_t::num_double: {
+                    std::uint64_t v = 0;
+                    for (int i = 0; i < 8; ++i) {
+                        v |= static_cast<std::uint64_t>(
+                                static_cast<unsigned char>(*iter)) << (8*i);
+                        ++iter;
+                    }
+                    out = std::bit_cast<double>(v);
+                    break;
+                }
+            }
+            return iter;
+        case bin_element_t::string:
+        case bin_element_t::num_string:
+            iter = parse_len(iter, end, len);
+            out = value(shared_array_t<char> ::create(len,[&](auto wr, auto wrend){
+                while (iter != end && wr != wrend) {
+                    *iter++ = *wr++;
+                }
+            }),tag == bin_element_t::num_string);
+            return iter;
+        case bin_element_t::bin_string:
+            iter = parse_len(iter, end, len);
+            out = value(shared_array_t<unsigned char> ::create(len,[&](auto wr, auto wrend){
+                while (iter != end && wr != wrend) {
+                    *iter++ = *wr++;
+                }
+            }));
+            return iter;
+        case bin_element_t::pos_number:
+            iter = parse_len(iter, end, len);
+            out = value(len);
+            return iter;
+        case bin_element_t::neg_number:
+            iter = parse_len(iter, end, len);
+            out = value(-static_cast<std::int64_t>(len));
+            return iter;
+        case bin_element_t::array:
+            iter = parse_len(iter, end, len);
+            out = value(shared_array_t<value> ::create(len,[&](auto wr, auto wrend){
+                while (iter != end && wr != wrend) {
+                    iter = parse_binary(iter, end, *wr);
+                    ++wr;
+                }
+            }));
+            return iter;
+        case bin_element_t::object:
+            iter = parse_len(iter, end, len);
+            out = value(shared_array_t<key_value> ::create(len,[&](auto wr, auto wrend){
+                while (iter != end && wr != wrend) {
+                    iter = parse_binary(iter, end, wr->key);
+                    iter = parse_binary(iter, end, wr->value);
+                    ++wr;
+                }
+            }));
+            return iter;
+    }
 }
 
 

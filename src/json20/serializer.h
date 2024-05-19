@@ -23,6 +23,15 @@ public:
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary(const value &v, Target &&target) {
 
+        char b = 0;
+        target(std::string_view(&b,1)); //store binary mark
+        serialize_binary_no_mark(v, std::forward<Target>(target));
+    }
+
+    ///serialize to binary, but doesn't store binary mark at the beginning
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_no_mark(const value &v, Target &&target) {
+
         v.visit([&](const auto &data){
             serialize_binary_item(data, target);
         });
@@ -32,8 +41,9 @@ public:
 
 
 
-
 protected:
+
+
 
     std::vector<char> _buffer;
 
@@ -343,21 +353,23 @@ protected:
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary_item(const binary_string_view_t &data, Target &target) {
         make_tlv_tag(bin_element_t::bin_string, data.size(), target);
-        target(data);
+        _buffer.resize(data.size());
+        std::copy(data.begin(), data.end(), _buffer.begin());
+        target(std::string_view(_buffer.data(), _buffer.size()));
     }
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary_item(const array_view &data, Target &target) {
         make_tlv_tag(bin_element_t::array, data.size(), target);
         for (const value &v: data) {
-            serialize_binary(v, target);
+            serialize_binary_no_mark(v, target);
         }
     }
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary_item(const object_view &data, Target &target) {
         make_tlv_tag(bin_element_t::object, data.size(), target);
         for (const key_value &v: data) {
-            serialize_binary(v.key, target);
-            serialize_binary(v.value, target);
+            serialize_binary_no_mark(v.key, target);
+            serialize_binary_no_mark(v.value, target);
         }
     }
 

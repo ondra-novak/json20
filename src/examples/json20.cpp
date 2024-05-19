@@ -155,6 +155,13 @@ int main() {
     json20::value smajlik = json20::value::from_json(R"("ahoj \uD83D\uDE00")");
     print(smajlik);
 
+    {
+        std::string buff;
+        json20::serializer_t srl;
+        srl.serialize_binary(vtest, [&](auto &&c){buff.append(c);});
+        hexDump(buff);
+    }
+
 
 
     /*

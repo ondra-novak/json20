@@ -39,12 +39,12 @@ enum class format_t {
  *
  *
  * 0x0  signle tags (each tag is signle, defines specified action)
- *          0x0 - sync - NOP, skip byte
+ *          0x0 - sync - NOP, skip byte, binary mark (detects binary format)
  *          0x1 - undefined
  *          0x2 - null value.
  *          0x3 - false value
  *          0x4 - true value
- * 0xB - follows 4 bytes containing float number in little endian order (only
+ * 0xB - follows 4 bytes containing float number in little endian order (only defined, not used)
  * 0xF - follows 8 bytes containing double number in little endian order
  * 0x10 - string: number=length, follows characters up to length
  * 0x20 - binary string: number=length, follows bytes up to length
