@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <iterator>
 
 namespace json20 {
 
@@ -301,7 +302,7 @@ public:
     static constexpr value create_string_view(std::string_view txt) {
         value out;
         out._data.type = string_view;
-        out._data.size = txt.size();
+        out._data.size = static_cast<std::uint32_t>(txt.size());
         out._data.str_view = txt.data();
         return out;
     }
@@ -1130,7 +1131,7 @@ template<unsigned int N>
 class array {
 public:
 
-    constexpr array(const value (&items)[N]):_is_constexpr(std::is_constant_evaluated()) {
+    constexpr array(const std::initializer_list<value> &items):_is_constexpr(std::is_constant_evaluated()) {
         std::copy(std::begin(items), std::end(items), std::begin(_items));
     }
 
@@ -1141,7 +1142,7 @@ public:
     array &temporary_use() {_is_constexpr = true;return *this;}
 
 protected:
-    value _items[N];
+    value _items[N] = {};
     bool _is_constexpr;
 };
 
@@ -1149,7 +1150,6 @@ template<>
 class array<0> {
 public:
 
-    constexpr array(const std::initializer_list<value> &) {}
     constexpr array() = default;
 
     constexpr auto size() const {return 0;}
@@ -1164,6 +1164,12 @@ template<unsigned int N>
 class object {
 public:
 
+    constexpr object(const std::initializer_list<std::pair<std::string_view, value> > &items):_is_constexpr(std::is_constant_evaluated()) {
+        std::transform(std::begin(items), std::end(items), std::begin(_items), [](const auto &p)->key_value{
+            return {p.first, p.second};
+        });
+        value::sort_object(std::begin(_items), std::end(_items));
+    }
     constexpr object(const std::pair<std::string_view, value> (&items)[N]):_is_constexpr(std::is_constant_evaluated()) {
         std::transform(std::begin(items), std::end(items), std::begin(_items), [](const auto &p)->key_value{
             return {p.first, p.second};
@@ -1186,7 +1192,6 @@ template<>
 class object<0> {
 public:
 
-    constexpr object(const std::initializer_list<value> &) {}
     constexpr object() = default;
 
     constexpr auto size() const {return 0;}

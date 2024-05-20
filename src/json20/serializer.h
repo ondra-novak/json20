@@ -2,6 +2,7 @@
 #include "serialize_common.h"
 #include <vector>
 #include <iterator>
+#include <bit>
 
 namespace json20 {
 
@@ -93,21 +94,21 @@ protected:
     }
 
     template<bool minus, typename V>
-    constexpr std::vector<char>::iterator recurse_number_to_str(V val, int sz = 0) {
+    constexpr char * recurse_number_to_str(V val, int sz = 0) {
         if (val) {
             auto iter = recurse_number_to_str<minus>(val/10, sz+1);
             *iter = (val%10) + '0';
             ++iter;
             return iter;
         }
-        if (minus) {
-            _buffer.resize(sz+1);
-            auto iter = _buffer.begin();
+        if constexpr (minus) {
+            _buffer.resize(sz+1,0);
+            auto iter = _buffer.data();
             *iter++ = '-';
             return iter;
         } else {
-            _buffer.resize(sz);
-            auto iter = _buffer.begin();
+            _buffer.resize(sz,0);
+            auto iter = _buffer.data();
             return iter;
 
         }
@@ -192,10 +193,10 @@ protected:
     constexpr void serialize_item(const V &v, Target &target) {
         if (v < 0) {
             auto end = recurse_number_to_str<true>(static_cast<std::make_unsigned_t<V> >(-v));
-            target(std::string_view(_buffer.begin(), end));
+            target(std::string_view(_buffer.data(), end));
         } else if (v>0) {
             auto end = recurse_number_to_str<false>(static_cast<std::make_unsigned_t<V> >(v));
-            target(std::string_view(_buffer.begin(), end));
+            target(std::string_view(_buffer.data(), end));
         } else {
             target("0");
         }
@@ -207,7 +208,7 @@ protected:
         if (v == 0) target("0");
         else {
             auto end = recurse_number_to_str<false>(v);
-            target(std::string_view(_buffer.begin(), end));
+            target(std::string_view(_buffer.data(), end));
         }
     }
 
@@ -226,7 +227,7 @@ protected:
     }
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_item(const binary_string_view_t &data, Target &target) {
-        _buffer.resize((data.size()+2)/3*4+2);
+        _buffer.resize((data.size()+2)/3*4+2,0);
         auto wr = _buffer.begin();
         *wr++='"';
         if (!data.empty()) {
@@ -353,7 +354,7 @@ protected:
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary_item(const binary_string_view_t &data, Target &target) {
         make_tlv_tag(bin_element_t::bin_string, data.size(), target);
-        _buffer.resize(data.size());
+        _buffer.resize(data.size(),0);
         std::copy(data.begin(), data.end(), _buffer.begin());
         target(std::string_view(_buffer.data(), _buffer.size()));
     }
