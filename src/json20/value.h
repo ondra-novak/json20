@@ -727,10 +727,6 @@ protected:
 struct key_value {
     value key;
     value value;
-
-    constexpr bool operator==(const key_value &other) const {
-        return key == other.key && value == other.value;
-    }
 };
 
 template<typename Iter>
@@ -1120,7 +1116,8 @@ inline constexpr bool value::operator==(const value &other) const {
         case type::object: {
             object_view obj1 = as<object_view>();
             object_view obj2 = other.as<object_view>();
-            return std::equal(obj1.begin(), obj1.end(),obj2.begin(), obj2.end());
+            return std::equal(obj1.begin(), obj1.end(),obj2.begin(), obj2.end(), 
+                [](const key_value &a,const key_value &b){return a.key == b.key && a.value == b.value;});
         }
         default: return false;
     }
@@ -1146,8 +1143,6 @@ inline constexpr value::iterator_t value::end() const {
         }
     });
 }
-
-
 
 template<unsigned int N>
 class array {
@@ -1230,6 +1225,31 @@ array() -> array<0>;
 template<unsigned int N>
 object(const std::pair<std::string_view, value> (&)[N]) -> object<N>;
 object()-> object<0>;
+#if 0
+template<unsigned int N>
+class structured {
+public:
+
+    constexpr structured(const value &val) {
+        build<0,0>(val);
+    }
+
+protected:
+    value _items[N];
+
+    template<int Index, int Level>
+    constexpr void build(const value &val) {
+        if (constexpr )
+        val.visit([&](const auto &item){
+            using T = std::decay_t<decltype(item)>;
+            if constexpr(std::is_same_v<T, array_view>) {
+                
+            }
+        })
+    }
+
+}
+#endif
 
 template<unsigned int N>
 constexpr value::value(const array<N> &arr)
