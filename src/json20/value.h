@@ -1,6 +1,6 @@
 #pragma once
 
-#include "spec_conv.h"
+#include "number_string.h"
 #include "shared_array.h"
 #include "base64.h"
 #include <span>
@@ -12,6 +12,12 @@
 #include <iterator>
 
 namespace json20 {
+
+///undefined type - represents undefined value (monostate)
+struct undefined_t {};
+template<typename To>
+struct value_conversion_t {};
+
 
 using binary_string_view_t = std::basic_string_view<unsigned char>;
 
@@ -112,7 +118,7 @@ public:
     static constexpr std::string_view str_undefined = "undefined";
 
     ///constructs undefined value
-    constexpr value():_data{undef_default, 0, 0, {}} {}
+    constexpr value():_data{undef, 0, 0, {}} {}
     constexpr ~value();
 
     ///construct copy
@@ -126,8 +132,6 @@ public:
 
     ///construct null
     constexpr value(std::nullptr_t):_data{null,0,0,{}} {}
-    ///construct from c-text
-    constexpr value(const char *text):value(std::string_view(text)) {}
     ///construct bool
     constexpr value(bool b):_data{boolean,0,0, {.b = b}} {}
     ///construct int
@@ -144,6 +148,10 @@ public:
     constexpr value(unsigned long long val):_data{vullong,0,0,{.vullong = val}} {}
     ///construct double value
     constexpr value(double val):_data{dbl,0,0,{.d = val}} {}
+
+    template<int N>
+    constexpr value(const char (&text)[N]):_data(string_view, 0, N-1, {.str_view = text}) {}
+
     ///construct structured value (array or object)
     /**
      * @param lst if there is array of pairs, where first of the pair is string, an
@@ -407,7 +415,7 @@ public:
      * @retval false value is defined and it is not null
      */
     constexpr bool operator==(std::nullptr_t) const {
-        return _data.type == undef || _data.type == undef_default || _data.type == null;
+        return _data.type == undef || _data.type == null;
     }
 
     ///Retrieves type of value
@@ -416,7 +424,6 @@ public:
      */
     constexpr type type() const {
         switch (_data.type) {
-            case undef_default:
             case undef: return type::undefined;
             case null: return type::null;
             case string_view:
@@ -433,7 +440,6 @@ public:
             case vllong:
             case vullong:
             case dbl: return type::number;
-            case list: return type::array;
             case num_string_view:
             case num_string: return type::number;
             default:
@@ -447,7 +453,7 @@ public:
      * @retval false not defined
      */
     constexpr bool defined() const {
-        return _data.type != undef && _data.type != undef_default;
+        return _data.type != undef;
     }
 
     ///Retrieves a key of the value
@@ -575,13 +581,7 @@ public:
     value merge_objects(const value &val) const;
     value merge_objects_recursive(const value &val) const;
 
-
-
-
-
 protected:
-
-    explicit constexpr value(const std::initializer_list<_details::list_item> *lst):_data{list, 0,0,{.list = lst}} {}
 
     template<typename Iter>
     static constexpr void sort_object(Iter beg, Iter end);
@@ -590,8 +590,6 @@ protected:
     enum Type : unsigned char{
         ///undefined value
         undef = 32,
-        ///undefined value constructed by default constructor
-        undef_default,
         ///null value
         null,
         ///string view  (str_view)
@@ -622,8 +620,6 @@ protected:
         const_array,
         ///object array - pointer to key_value array (sorted)
         const_object,
-        ///pointer to initializer list (internal)
-        list,
         ///string (allocated) as number
         num_string,
         ///string view as number
@@ -673,8 +669,6 @@ protected:
             const value *const_array;
             ///pointer to statically allocated array
             const key_value *const_object;
-            ///pointer to initializer list
-            const std::initializer_list<_details::list_item> *list;
             ///number
             int vint;
             ///number
@@ -738,6 +732,17 @@ struct key_value {
         return key == other.key && value == other.value;
     }
 };
+
+template<typename Iter>
+constexpr void value::sort_object(Iter beg, Iter end) {
+    std::sort(beg, end,[&](const key_value &a, const key_value &b){
+        return a.key.as<std::string_view>() < b.key.as<std::string_view>();
+    });
+    std::for_each(beg, end, [](key_value &x){
+        x.key.mark_has_key();
+    });
+}
+
 
 inline constexpr value::value(const array_view &arr)
     :_data{shared_array, 0, 0,{.shared_array = shared_array_t<value>::create(arr.size(), [&](auto from, auto ){
@@ -812,7 +817,6 @@ inline constexpr std::size_t value::size() const {
         case shared_object: return std::distance(_data.shared_object->begin(),_data.shared_object->end());
         case const_object:
         case const_array: return _data.size;
-        case list: return _data.list->size();
         default: return 0;
     }
 }
@@ -825,7 +829,6 @@ template<typename Fn>
 inline constexpr decltype(auto) value::visit(Fn &&fn) const {
 
     switch (_data.type) {
-        case undef_default:
         case undef: return fn(undefined_t{});
         case null: return fn(nullptr);
         case string_view: return fn(std::string_view(_data.str_view,_data.size));
@@ -834,7 +837,6 @@ inline constexpr decltype(auto) value::visit(Fn &&fn) const {
         case shared_object: return fn(object_view(_data.shared_object->begin(), _data.shared_object->end()));
         case const_array: return fn(array_view(_data.const_array, _data.size));
         case const_object: return fn(object_view(_data.const_object, _data.size));
-        case list: return fn(_data.list);
         case boolean: return fn(_data.b);
         case vint: return fn(_data.vint);
         case vuint: return fn(_data.vuint);
@@ -936,50 +938,81 @@ inline constexpr bool value::contains() const {
 
 namespace _details {
 
-class list_item: public value {
+class list_item {
 public:
 
-    using value::value;
+    enum class Type {
+        empty,
+        element,
+        list
+    };
 
-    constexpr list_item(const value &val):value(val) {}
-
-    constexpr list_item(const std::initializer_list<list_item> &list)
-        :value(&list) {}
-
-    static constexpr value build(const value &v) {
-        switch (v._data.type) {
-            case undef_default: return type::array;
-            case list: return build_item(v._data.list);
-            default: return v;
+    constexpr list_item():_type(Type::empty) {}
+    template<std::convertible_to<value> T>
+    constexpr list_item(T && val):_type(Type::element),_val(std::forward<T>(val)) {}
+    constexpr list_item(std::initializer_list<list_item> list):_type(Type::list),_list(std::move(list)) {}
+    constexpr list_item(list_item &&other):_type(other._type) {
+        switch(_type) {
+            case Type::element: std::construct_at(&_val, std::move(other._val));break;
+            case Type::list: std::construct_at(&_list, std::move(other._list));break;
+            default:break;
+        }
+    }
+    constexpr ~list_item() {
+        switch(_type) {
+            case Type::element: std::destroy_at(&_val);break;
+            case Type::list: std::destroy_at(&_list);break;
+            default:break;
         }
     }
 
-    template<typename Cont>
-    static constexpr value build_item(const Cont *lst) noexcept {
-        if (lst->size()  && std::all_of(lst->begin(), lst->end(), [&](const value &el){
-            auto sz = el.size();
-            return ((sz == 1) | (sz == 2)) && el[0].type() == type::string;
+    constexpr value build() const  {
+        switch (_type) {
+            case Type::empty: return value(type::array);
+            case Type::element:return _val;
+            case Type::list: break;
+        }
+
+        if (_list.size()>0 && std::all_of(_list.begin(), _list.end(), [&](const list_item &item){
+            return  (item._type == Type::list  
+              && item._list.size() == 2 
+              && item._list.begin()->_type == Type::element 
+              && item._list.begin()->_val.type() == type::string);
         })) {
-            auto *kv = shared_array_t<key_value>::create(lst->size(),
-                    [&](auto beg, auto ) {
-                std::transform(lst->begin(), lst->end(), beg, [&](const value &el){
-                    return key_value{el[0], build(el[1])};
+            auto *kv = shared_array_t<key_value>::create(_list.size(), [&](auto beg, auto ) {
+                std::transform(_list.begin(), _list.end(), beg, [&](const list_item &el){
+                    auto i1 = el._list.begin();
+                    auto i2 = i1;
+                    ++i2;
+                    return key_value{i1->_val, i2->build()};
                 });
             });
-            sort_object(kv->begin(), kv->end());
             return value(kv);
         } else {
-            std::size_t needsz = 0;
-            for (const auto &x : *lst) if (x._data.type != undef) ++needsz;
-            auto arr = shared_array_t<value>::create(needsz,
-                    [&](auto beg, auto ) {
-                            for (const auto &x : *lst) if (x._data.type != undef) {
-                                *beg++ = build(x);
-                            }
+            std::size_t cnt = 0;
+            for (const auto &x: _list) {
+                if (x._type != Type::element || x._val.defined()) ++cnt; 
+            }
+            if (cnt == 0) return value(type::array);
+            auto *arr = shared_array_t<value>::create(cnt, [&](auto beg, auto){
+                for (const auto &x: _list) {
+                    if (x._type != Type::element || x._val.defined()) {
+                        *beg++=x.build();
+                    }
+                }
             });
             return value(arr);
         }
     }
+
+
+protected:
+    Type _type;
+    union {
+        value _val;
+        std::initializer_list<list_item> _list;
+    };
+
 };
 
 }
@@ -990,7 +1023,6 @@ constexpr const value &value::operator[](std::size_t pos) const {
         case const_array: return _data.size <= pos?undefined:_data.const_array[pos];
         case shared_object: return _data.shared_object->size()<=pos?undefined:_data.shared_object->begin()[pos].value;
         case const_object: return _data.size <= pos?undefined:_data.const_object[pos].value;
-        case list: return _data.list->size() <= pos?undefined: _data.list->begin()[pos];
         default: return undefined;
     }
 }
@@ -1030,7 +1062,7 @@ constexpr std::string_view value::key_at(std::size_t pos) const {
 
 
 inline constexpr value::value(const std::initializer_list<_details::list_item> &lst)
-    :value(_details::list_item::build_item(&lst)) {
+    :value(_details::list_item(lst).build()) {
 
 }
 
@@ -1092,16 +1124,6 @@ inline constexpr bool value::operator==(const value &other) const {
         }
         default: return false;
     }
-}
-
-template<typename Iter>
-constexpr void value::sort_object(Iter beg, Iter end) {
-    std::sort(beg, end,[&](const key_value &a, const key_value &b){
-        return a.key.as<std::string_view>() < b.key.as<std::string_view>();
-    });
-    std::for_each(beg, end, [](key_value &x){
-        x.key.mark_has_key();
-    });
 }
 
 inline constexpr value::iterator_t value::begin() const {
@@ -1320,8 +1342,6 @@ inline binary_string_t value_conversion_t<binary_string_t>::operator()(const std
 }
 
 
-//clang complains for undefined function
-template value _details::list_item::build_item<std::span<value const> >(std::span<value const> const*) noexcept;
 //clang complains for undefined function
 template std::string json20::value::as<std::string>() const;
 

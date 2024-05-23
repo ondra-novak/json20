@@ -3,6 +3,7 @@
 #include <cctype>
 #include <limits>
 #include <string_view>
+#include <optional>
 
 namespace json20 {
 
@@ -18,7 +19,7 @@ template<typename T> concept number_t =
 
 
 template<typename T>
-concept optional_signed_integer_number_t = signed_integer_number_t<T> || std::constructible_from<T, decltype(std::nullopt)>;
+concept optional_signed_integer_number_t = signed_integer_number_t<T> || std::constructible_from<T, decltype(std::  nullopt)>;
 template<typename T>
 concept optional_unsigned_integer_number_t = unsigned_integer_number_t<T> || std::constructible_from<T, decltype(std::nullopt)>;
 

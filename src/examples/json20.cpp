@@ -118,13 +118,15 @@ int main() {
                     {"vek",15}
                 }
             }},
-           {"vek",45},
+            {"vek",45},
             {"zenaty", true},
             {"delete", json20::type::undefined},
             {"flags",{{1.258, 12.148e52}}},
             {"array_test",json20::array({1,2,3})},
             {"text_contains_quotes","I say \"hello world\"!"},
             {"_real",3.141592},
+            {"array",{{"ahoj","nazdar"},json20::undefined}},
+            {"empty_array",{}}
         };
 
     json20::print({1,2,3,{},4,5,6});

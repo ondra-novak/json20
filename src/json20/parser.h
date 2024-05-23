@@ -438,6 +438,7 @@ constexpr Iter parser_t::parse_binary(Iter iter, Iter end, value &out) {
                     out = std::bit_cast<double>(v);
                     break;
                 }
+                default: throw parse_error_t(parse_error_t::unexpected_character, iter);
             }
             return iter;
         case bin_element_t::string:
@@ -484,6 +485,7 @@ constexpr Iter parser_t::parse_binary(Iter iter, Iter end, value &out) {
                 }
             }));
             return iter;
+        default: throw parse_error_t(parse_error_t::unexpected_character, iter);
     }
 }
 
