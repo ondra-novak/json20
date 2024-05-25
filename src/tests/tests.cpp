@@ -170,23 +170,24 @@ constexpr auto test_binary_data = check(static_cast<binary_string_view_t>(exampl
 
 constexpr value t = true;
 constexpr value val1 = 1;
-constexpr array test_arrayx ({t,val1});
-constexpr array test_array ({"100",45,false, nullptr});
-constexpr array test_array2 ({test_array, "cus"});
+constexpr value xx[2] = {"100",32};
+constexpr value test_array[] = {"100",45,false, nullptr};
+constexpr value test_array2[] = {test_array, "cus"};
 
 constexpr value test_array_val = test_array2;
 
-constexpr object test_obj_snippet ( {
-        {"axy",10},
-        {"zsee",85},
-        {"sub_test", test_array},
-        {"sub_test2", test_array2}
-});
 
-constexpr value test_obj = test_obj_snippet;
 constexpr value test_arr = test_array;
 
 constexpr bool test_constexpr_obj = []{
+
+        object test_obj ({
+                {"axy",10},
+                {"zsee",85},
+                {"sub_test", test_array},
+                {"sub_test2", test_array2}
+        });
+
         check(test_arr[0].as<std::string_view>() == "100");
         check(test_obj["axy"].as<int>() == 10);
         check(test_obj["zsee"].as<int>() == 85);
@@ -197,6 +198,7 @@ constexpr bool test_constexpr_obj = []{
 
         return true;
 }();
+
 
 constexpr bool serialize_json_0 = []{
         std::vector<char> buff;
@@ -218,10 +220,11 @@ constexpr bool serialize_json_0 = []{
 }();
 
 
-/*
+
 
 constexpr bool parse_json_2 = []{
-        const value &v = test_json_parsed;
+        value v = value::from_json(test_json);
+
         check(v["abc"].as<int>() == 123);
         check(v["xyz"].as<int>() == 42);
         check(v["pole"].size() == 3);
@@ -239,7 +242,7 @@ constexpr bool parse_json_2 = []{
         return true;
 }();
 
-*/
+
 
 
 

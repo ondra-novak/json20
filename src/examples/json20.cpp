@@ -97,13 +97,32 @@ void hexDump(const std::string& input) {
 }
 
 
+constexpr auto testjson_structured = []{return json20::structured<[]{return json20::value{
+        {"ahoj","nazdar"},
+        {"val",10},
+        {"array",{"jedna",2,3.14}},
+        {"object",{
+                {"key","value"},
+                {"item",123.4567}
+        }}
+};}>();}();
 
+constexpr const json20::value &testjson = testjson_structured;
+
+constexpr auto test_obj = ([]{return json20::object ({
+        {"axy",10},
+        {"zsee",85},
+//        {"sub_test", testjson_structured},
+});})();
 
 
 int main() {
 
+    std::cout << (test_obj["axy"].as<int>() == 10) << std::endl;
+    std::cout << testjson.to_json() << std::endl;
+    std::cout << test_obj.to_json() << std::endl;
 
-
+    exit(0);
     json20::value vtest = {
             {"jmeno","franta"},
             {"prijmeni","voprsalek"},
@@ -122,7 +141,7 @@ int main() {
             {"zenaty", true},
             {"delete", json20::type::undefined},
             {"flags",{{1.258, 12.148e52}}},
-            {"array_test",json20::array({1,2,3})},
+            {"array_test",{1,2,3}},
             {"text_contains_quotes","I say \"hello world\"!"},
             {"_real",3.141592},
             {"array",{{"ahoj","nazdar"},json20::undefined}},

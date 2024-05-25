@@ -258,13 +258,13 @@ protected:
         else {
             target("{");
             auto iter = data.begin();
-            serialize_item(iter->key.as<std::string_view>(), target);
+            serialize_item(iter->key.str(), target);
             target(":");
             serialize(iter->value, target);
             ++iter;
             while (iter != data.end()) {
                 target(",");
-                serialize_item(iter->key.as<std::string_view>(), target);
+                serialize_item(iter->key.str(), target);
                 target(":");
                 serialize(iter->value, target);
                 ++iter;

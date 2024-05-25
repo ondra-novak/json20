@@ -142,11 +142,7 @@ constexpr Iter parser_t::parse(Iter iter, Iter end,  value &out) {
                 out = nullptr;
                 return check_kw(iter, end, "null");
             default:
-            {
-                char z[1];
-                z[(int)c] = 1;
                 throw parse_error_t(parse_error_t::unexpected_character, iter);
-            }
         }
     }
 }
@@ -386,7 +382,7 @@ constexpr Iter parser_t::parse_object(Iter iter, Iter end, value &out) {
     auto cnt = (_value_stack.size() - stpos)/2;
     auto arr = shared_array_t<key_value>::create(cnt,[&](auto from, auto){
         for (std::size_t i = 0; i < cnt; ++i) {
-            from->key = std::move(_value_stack[stpos+i*2]);
+            from->key = key_t::from_value(std::move(_value_stack[stpos+i*2]));
             from->value = std::move(_value_stack[stpos+i*2+1]);
             ++from;
         }

@@ -5,7 +5,7 @@ if (MSVC)
 	add_compile_options(/W4 /EHsc /DNOMINMAX /std:c++20)
 	set(STANDARD_LIBRARIES "")
 else()
-	add_compile_options(-Wall -Wextra -Wpedantic -fconstexpr-backtrace-limit=0 -std=c++20)
+	add_compile_options(-Wall -Wextra -Wpedantic  -std=c++20)
 	set(STANDARD_LIBRARIES "pthread")
 endif()
 
