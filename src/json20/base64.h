@@ -1,6 +1,8 @@
 #pragma once
 
-namespace json20 {
+#include "common.h"
+
+namespace JSON20_NAMESPACE_NAME {
 
 class base64_t {
 public:

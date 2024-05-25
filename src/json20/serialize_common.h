@@ -2,8 +2,8 @@
 
 #include "value.h"
 
-#include <utility>
-namespace json20 {
+
+namespace JSON20_NAMESPACE_NAME {
 
 enum class format_t {
     //standard JSON

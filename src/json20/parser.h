@@ -7,7 +7,7 @@
 #include "serialize_common.h"
 
 
-namespace json20 {
+namespace JSON20_NAMESPACE_NAME {
 
 class parse_error_t: public std::exception {
 public:

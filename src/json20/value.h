@@ -3,15 +3,10 @@
 #include "number_string.h"
 #include "shared_array.h"
 #include "base64.h"
-#include <span>
-#include <algorithm>
-#include <cstdint>
-#include <memory>
-#include <string>
-#include <vector>
-#include <iterator>
 
-namespace json20 {
+#include "common.h"
+
+namespace JSON20_NAMESPACE_NAME {
 
 ///undefined type - represents undefined value (monostate)
 struct undefined_t {};
@@ -1496,7 +1491,7 @@ inline binary_string_t value_conversion_t<binary_string_t>::operator()(const std
 
 
 //clang complains for undefined function
-template std::string json20::value_t::as<std::string>() const;
+template std::string value_t::as<std::string>() const;
 
 using type = type_t;
 using value = value_t;

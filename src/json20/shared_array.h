@@ -4,7 +4,7 @@
 #include <optional>
 
 
-namespace json20 {
+namespace JSON20_NAMESPACE_NAME {
 
 ///implements reference counter with constexpr support
 /** @note it is union */

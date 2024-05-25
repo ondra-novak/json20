@@ -5,7 +5,7 @@
 #include <iostream>
 #include <iomanip>
 
-namespace json20 {
+namespace JSON20_NAMESPACE_NAME {
 
 void print(const value &el) {
     el.visit([&](const auto &item){
@@ -61,9 +61,9 @@ void println(const value &el) {
 /*
 
 constexpr auto test_json_bin = []{
-        auto json = json20::value::from_json(test_json);
-        json20::serializer_t<json20::format_t::binary> sr(json);
-        json20::parser_t<json20::format_t::binary> pr;
+        auto json = json::value::from_json(test_json);
+        json::serializer_t<json::format_t::binary> sr(json);
+        json::parser_t<json::format_t::binary> pr;
         std::string_view txt = sr.read();
         while (!txt.empty()) {
             if (pr.write(txt)) break;
@@ -97,7 +97,7 @@ void hexDump(const std::string& input) {
 }
 
 
-constexpr auto testjson_structured = []{return json20::structured<[]{return json20::value({
+constexpr auto testjson_structured = []{return json::structured<[]{return json::value({
         {"ahoj","nazdar"},
         {"val",10},
         {"array",{"jedna",2,3.14}},
@@ -107,9 +107,9 @@ constexpr auto testjson_structured = []{return json20::structured<[]{return json
         }}
 });}>();}();
 
-constexpr const json20::value &testjson = testjson_structured;
+constexpr const json::value &testjson = testjson_structured;
 
-constexpr auto test_obj = ([]{return json20::object ({
+constexpr auto test_obj = ([]{return json::object ({
         {"axy",10},
         {"zsee",85},
 //        {"sub_test", testjson_structured},
@@ -122,7 +122,7 @@ int main() {
     std::cout << testjson.to_json() << std::endl;
     std::cout << test_obj.to_json() << std::endl;
 
-    json20::value vtest({
+    json::value vtest({
             {"jmeno","franta"},
             {"prijmeni","voprsalek"},
             {"deti", {
@@ -138,17 +138,17 @@ int main() {
             }},
             {"vek",45},
             {"zenaty", true},
-            {"delete", json20::type::undefined},
+            {"delete", json::type::undefined},
             {"flags",{{1.258, 12.148e52}}},
             {"array_test",{1,2,3}},
             {"text_contains_quotes","I say \"hello world\"!"},
             {"_real",3.141592},
-            {"array",{{"ahoj","nazdar"},json20::undefined}},
+            {"array",{{"ahoj","nazdar"},json::undefined}},
             {"empty_array",{}}
         });
 
-    json20::print({1,2,3,{},4,5,6});
-    json20::value v = json20::object_view({
+    json::print({1,2,3,{},4,5,6});
+    json::value v = json::object_view({
             {"123456789ABCDEF",1},
             {"bbb",2}
     });
@@ -156,28 +156,28 @@ int main() {
     std::cout << k << std::endl;
     k = vtest[1].key();
     std::cout << k << std::endl;
-    std::cout << sizeof(json20::value) << std::endl;
-    json20::value vnum(json20::number_string("1.2345"));
-    json20::value vnum2(json20::number_string("-123.4545285752485087804896e+03"));
+    std::cout << sizeof(json::value) << std::endl;
+    json::value vnum(json::number_string("1.2345"));
+    json::value vnum2(json::number_string("-123.4545285752485087804896e+03"));
     std::cout << vnum.as<double>() << std::endl;
     std::cout << vnum2.as<double>() << std::endl;
     std::cout << static_cast<int>(vnum.type()) << std::endl;
     std::cout << static_cast<int>(vnum2.type()) << std::endl;
 
     std::string ss = vtest.to_json();
-    json20::parser_t prs;
-    json20::value out;
+    json::parser_t prs;
+    json::value out;
     prs.parse(ss.begin(), ss.end(), out);
     print(out);
 
     std::cout << std::endl;
 
-    json20::value smajlik = json20::value::from_json(R"("ahoj \uD83D\uDE00")");
+    json::value smajlik = json::value::from_json(R"("ahoj \uD83D\uDE00")");
     print(smajlik);
 
     {
         std::string buff;
-        json20::serializer_t srl;
+        json::serializer_t srl;
         srl.serialize_binary(vtest, [&](auto &&c){buff.append(c);});
         hexDump(buff);
     }
@@ -189,14 +189,14 @@ int main() {
 
     bool parse_json_1 = []{
             const std::string_view txt = "[1,2,true,\"hello\"]extra";
-            json20::parser_t p;
+            json::parser_t p;
             p.write(txt);
             auto v = p.get_parsed();
             auto u = p.get_unused_text();
             return true;
     }();
 
-    auto zzz = json20::value::from_json(test_json);
+    auto zzz = json::value::from_json(test_json);
     int zzy = test_json_parsed["abc"].as<int>();
 
     for (char c: example_binary_data) {

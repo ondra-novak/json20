@@ -4,7 +4,7 @@
 #include <iterator>
 #include <bit>
 
-namespace json20 {
+namespace JSON20_NAMESPACE_NAME {
 
 
 class serializer_t {

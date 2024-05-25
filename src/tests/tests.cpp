@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <array>
 
-namespace json20 {
+namespace JSON20_NAMESPACE_NAME {
 
 
 

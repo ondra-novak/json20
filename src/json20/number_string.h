@@ -1,11 +1,8 @@
 #pragma once
 
-#include <cctype>
-#include <limits>
-#include <string_view>
-#include <optional>
+#include "common.h"
 
-namespace json20 {
+namespace JSON20_NAMESPACE_NAME {
 
 template<typename T> concept signed_integer_number_t =
           std::is_same_v<T, short int> || std::is_same_v<T, int> ||
