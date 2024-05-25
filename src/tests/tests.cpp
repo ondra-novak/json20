@@ -1,5 +1,6 @@
-#include "../json20/serializer.h"
-#include "../json20/parser.h"
+#include "../json/parser.h"
+#include "../json/serializer.h"
+
 #include <cstdint>
 #include <array>
 

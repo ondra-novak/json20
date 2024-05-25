@@ -1,6 +1,4 @@
-#include "../json20/value.h"
-#include "../json20/serializer.h"
-#include "../json20/parser.h"
+#include <json20.h>
 
 #include <iostream>
 #include <iomanip>

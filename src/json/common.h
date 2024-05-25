@@ -11,6 +11,10 @@
 #include <utility>
 #include <bit>
 #include <algorithm>
+#include <any>
+#include <iterator>
+#include <atomic>
+
 
 #ifndef JSON20_NAMESPACE_NAME
 #define JSON20_NAMESPACE_NAME json

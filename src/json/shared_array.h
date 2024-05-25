@@ -1,8 +1,6 @@
 #pragma once
 
-#include <atomic>
-#include <optional>
-
+#include "common.h"
 
 namespace JSON20_NAMESPACE_NAME {
 

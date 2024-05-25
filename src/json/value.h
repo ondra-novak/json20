@@ -1,10 +1,9 @@
 #pragma once
 
+#include "base64.h"
+#include "common.h"
 #include "number_string.h"
 #include "shared_array.h"
-#include "base64.h"
-
-#include "common.h"
 
 namespace JSON20_NAMESPACE_NAME {
 

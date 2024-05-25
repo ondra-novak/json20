@@ -1,0 +1,15 @@
+# Config.cmake.in
+@PACKAGE_INIT@
+
+# Set the install prefix
+set_and_check(LIBJSON20_INSTALL_PREFIX "@CMAKE_INSTALL_PREFIX@")
+
+# Define the include directory
+set(LIBJSON20_INCLUDE_DIR "${LIBJSON20_INSTALL_PREFIX}/include/libjson20")
+
+# Create the target to be used by the find_package command
+add_library(libjson20 INTERFACE)
+target_include_directories(libjson20 INTERFACE "$<INSTALL_INTERFACE:${LIBJSON20_INCLUDE_DIR}>")
+
+# Install the target
+install(TARGETS libjson20 EXPORT libjson20Targets)
