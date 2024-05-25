@@ -97,7 +97,7 @@ void hexDump(const std::string& input) {
 }
 
 
-constexpr auto testjson_structured = []{return json20::structured<[]{return json20::value{
+constexpr auto testjson_structured = []{return json20::structured<[]{return json20::value({
         {"ahoj","nazdar"},
         {"val",10},
         {"array",{"jedna",2,3.14}},
@@ -105,7 +105,7 @@ constexpr auto testjson_structured = []{return json20::structured<[]{return json
                 {"key","value"},
                 {"item",123.4567}
         }}
-};}>();}();
+});}>();}();
 
 constexpr const json20::value &testjson = testjson_structured;
 
@@ -122,8 +122,7 @@ int main() {
     std::cout << testjson.to_json() << std::endl;
     std::cout << test_obj.to_json() << std::endl;
 
-    exit(0);
-    json20::value vtest = {
+    json20::value vtest({
             {"jmeno","franta"},
             {"prijmeni","voprsalek"},
             {"deti", {
@@ -146,7 +145,7 @@ int main() {
             {"_real",3.141592},
             {"array",{{"ahoj","nazdar"},json20::undefined}},
             {"empty_array",{}}
-        };
+        });
 
     json20::print({1,2,3,{},4,5,6});
     json20::value v = json20::object_view({

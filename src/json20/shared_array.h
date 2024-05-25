@@ -6,11 +6,16 @@
 
 namespace json20 {
 
+///implements reference counter with constexpr support
+/** @note it is union */
 template<typename T>
 union constexpr_counter {
+    ///runtime counter
     std::atomic<T> _cntr;
+    ///constexpr counter
     T _ccntr;
 
+    ///construct
     constexpr constexpr_counter(T val) {
         if (std::is_constant_evaluated()) {
             std::construct_at(&_ccntr, val);
@@ -19,6 +24,7 @@ union constexpr_counter {
         }
     }
 
+    ///destruct
     constexpr ~constexpr_counter() {
         if (std::is_constant_evaluated()) {
             std::destroy_at(&_ccntr);
@@ -27,6 +33,7 @@ union constexpr_counter {
         }
     }
 
+    ///implement inc
     constexpr T operator++() {
         if (std::is_constant_evaluated()) {
             return ++_ccntr;
@@ -35,6 +42,7 @@ union constexpr_counter {
         }
     }
 
+    ///implement dec
     constexpr T operator--() {
         if (std::is_constant_evaluated()) {
             return --_ccntr;

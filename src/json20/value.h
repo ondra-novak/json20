@@ -157,7 +157,7 @@ public:
      * @param lst if there is array of pairs, where first of the pair is string, an
      * object is constructed, otherwise, an array is constructed
      */
-    constexpr value_t(const std::initializer_list<_details::list_item> &lst);
+    constexpr value_t(std::initializer_list<_details::list_item> lst);
     ///construct array
     constexpr value_t(const array_view &arr);
     ///construct object
@@ -1154,7 +1154,7 @@ constexpr std::string_view value_t::key_at(std::size_t pos) const {
 }
 
 
-inline constexpr value_t::value_t(const std::initializer_list<_details::list_item> &lst)
+inline constexpr value_t::value_t(std::initializer_list<_details::list_item> lst)
     :value_t(_details::list_item(lst).build()) {
 
 }
