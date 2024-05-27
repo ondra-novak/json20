@@ -27,24 +27,30 @@ public:
     static constexpr int maxexp = std::numeric_limits<double>::max_exponent10;
     static constexpr int table_size = maxexp - minexp + 1;
 
-    constexpr pows10_table_t() {
-        table[-minexp] = 1.0;
-        double v = 1.0;
-        for (int i = 1; i <= maxexp; ++i) {
-            v = v * 10;
-            table[i-minexp] = v;
-        }
-        v = 1.0;
-        for (int i = -1; i >= minexp; --i) {
-            v = v /10;
-            table[i - minexp] = v;
-        }
-    }
+    constexpr double pow10_cont(double base, int exponent) const{
+         if (exponent == 0) return 1.0;
+         if (exponent % 2 == 0) {
+             double halfPower = pow10_cont(base, exponent / 2);
+             return halfPower * halfPower;
+         } else {
+             return base * pow10_cont(base, exponent - 1);
+         }
+     }
+
+     constexpr double pow(double base, int exponent) const{
+         if (exponent == 1) return base;
+         if (exponent < 0) {
+             base = 1.0 / base;
+             exponent = -exponent;
+         }
+         return pow10_cont(base, exponent);
+     }
+
 
     constexpr double pow10(int exponent) const{
         if (exponent<minexp) return -std::numeric_limits<double>::infinity();
         if (exponent>maxexp) return +std::numeric_limits<double>::infinity();
-        return table[exponent-minexp];
+        return pow(10,exponent);
     }
 
     constexpr int log10(double number) const {

@@ -62,7 +62,8 @@ enum class bin_element_t:unsigned char {
     null = 0x2,             //emit null
     bool_false = 0x3,       //emit boolean false
     bool_true = 0x4,        //emit boolean true
-    num_double =0xF,        //8 bytes of double follows litte endian
+    placeholder = 0xA,       //emit placeholder, follows 2 bytes position
+    num_double =0xF,        //8 bytes of double follows little endian
     string = 0x10,          //0x1<size...> string
     bin_string = 0x20,      //0x2<size...> string number
     num_string = 0x30,      //0x3<size...> binary string

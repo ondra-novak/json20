@@ -52,12 +52,25 @@ namespace _details {
     class list_item;
 }
 
+template<unsigned int N> struct placeholder_t {
+    static constexpr unsigned int position = N;
+};
+
+template<unsigned int N>
+static constexpr placeholder_t<N> placeholder = {};
+
+struct is_structured_t {};
+static constexpr is_structured_t is_structured {};
+
 class value_t;
 template<unsigned int N> class array;
 template<unsigned int N> class object;
 
 using array_view = std::span<const value_t>;
 using object_view = std::span<const key_value_t>;
+struct placeholder_view {
+    unsigned int position;
+};
 
 /*
  * string < 16 letters
@@ -146,6 +159,9 @@ public:
     template<int N>
     constexpr value_t(const char (&text)[N]):_data{string_view, 0, N-1, {.str_view = text}} {}
 
+    template<unsigned int N>
+    constexpr value_t(placeholder_t<N> pos):_data{placeholder, 0, 0, {.placeholder_pos = pos.position}} {}
+
     ///construct structured value (array or object)
     /**
      * @param lst if there is array of pairs, where first of the pair is string, an
@@ -168,6 +184,8 @@ public:
      * the value_t
      */
     explicit constexpr value_t(shared_array_t<value_t> *arr):_data{shared_array, 0, 0, {.shared_array = arr}} {}
+
+    explicit constexpr value_t(shared_array_t<value_t> *arr, is_structured_t):_data{shared_structured, 0, 0, {.shared_array = arr}} {}
     ///construct from shared array
     /**
      * @param arr pointer to array as shared_array object. The ownership is transfered to
@@ -347,6 +365,22 @@ public:
         return out;
     }
 
+    static constexpr value_t create_array_view_relative(int relative_pos, std::size_t count) {
+        value_t out;
+        out._data.type = const_array_rel;
+        out._data.size = static_cast<std::uint32_t>(count);
+        out._data.ptr_rel = relative_pos;
+        return out;
+    }
+
+    static constexpr value_t create_object_view_relative(int relative_pos, std::size_t count) {
+        value_t out;
+        out._data.type = const_object_rel;
+        out._data.size = static_cast<std::uint32_t>(count);
+        out._data.ptr_rel = relative_pos;
+        return out;
+    }
+
     ///Visit the value
     /**
      * @param fn lambda function (template function). The function is called with type
@@ -461,8 +495,10 @@ public:
             case string_view:
             case string: return type_t::string;
             case shared_array:
+            case const_array_rel:
             case const_array: return type_t::array;
             case shared_object:
+            case const_object_rel:
             case const_object: return type_t:: object;
             case boolean: return type_t::boolean;
             case vint:
@@ -474,6 +510,8 @@ public:
             case dbl: return type_t::number;
             case num_string_view:
             case num_string: return type_t::number;
+            case placeholder: return type_t::undefined;
+            case shared_structured: return _data.shared_array->begin()->type();
             default:
                 return _str.isnum?type_t::number: type_t::string;
         }
@@ -619,6 +657,14 @@ public:
     static constexpr void sort_object(Iter beg, Iter end);
 
 
+    constexpr bool is_placeholder() const {
+        return _data.type == placeholder;
+    }
+
+    constexpr unsigned int get_placeholder_pos() const {
+        return _data.placeholder_pos;
+    }
+
 protected:
 
 
@@ -636,6 +682,8 @@ protected:
         shared_array,
         ///object allocated/shared
         shared_object,
+        ///shared structured block
+        shared_structured,
         ///boolean value
         boolean,
         ///signed int
@@ -663,8 +711,13 @@ protected:
         ///binary string
         binary_string,
         ///binary string view
-        binary_string_view
-
+        binary_string_view,
+        ///placeholder
+        placeholder,
+        ///relativa const array
+        const_array_rel,
+        ///relative const object
+        const_object_rel,
     };
 
 
@@ -721,6 +774,10 @@ protected:
             double d;
             ///boolean
             bool b;
+            ///placeholder_position
+            unsigned int placeholder_pos;
+            ///pointer relative
+            int ptr_rel;
         };
      };
 
@@ -750,6 +807,7 @@ protected:
             case num_string:
             case string: fn(_data.shared_str);break;
             case binary_string: fn(_data.shared_bin_str);break;
+            case shared_structured:
             case shared_array: fn(_data.shared_array);break;
             case shared_object: fn(_data.shared_object);break;
             default:break;
@@ -924,6 +982,8 @@ inline constexpr decltype(auto) value_t::visit(Fn &&fn) const {
         case shared_object: return fn(object_view(_data.shared_object->begin(), _data.shared_object->end()));
         case const_array: return fn(array_view(_data.const_array, _data.size));
         case const_object: return fn(object_view(_data.const_object, _data.size));
+        case const_array_rel: return fn(array_view(this+_data.ptr_rel, _data.size));
+        case const_object_rel: return fn(object_view(reinterpret_cast<const key_value_t *>(this+_data.ptr_rel), _data.size));
         case boolean: return fn(_data.b);
         case vint: return fn(_data.vint);
         case vuint: return fn(_data.vuint);
@@ -936,6 +996,8 @@ inline constexpr decltype(auto) value_t::visit(Fn &&fn) const {
         case num_string: return fn(number_string({_data.shared_str->begin(),_data.shared_str->end()}));
         case binary_string_view: return fn(binary_string_view_t({_data.bin_str_view,_data.size}));
         case binary_string: return fn(binary_string_view_t({_data.shared_bin_str->begin(),_data.shared_bin_str->end()}));
+        case placeholder: return fn(placeholder_view{_data.placeholder_pos});
+        case shared_structured: return _data.shared_array->begin()->visit(std::forward<Fn>(fn));
         default:
             return _str.isnum?fn(number_string({_str.str, _str.size})):fn(std::string_view(_str.str, _str.size));
     }
@@ -1286,69 +1348,76 @@ template<unsigned int N>
 object(const std::pair<std::string_view, value_t> (&)[N]) -> object<N>;
 
 
-namespace _details {
+template<std::invocable<> Fn>
+class structured_t {
+public:
 
-    inline constexpr unsigned int calc_space_fn(const value_t &v) {
-        return v.visit([&](auto item){
+    static_assert(std::is_same_v<std::invoke_result_t<Fn>, value_t>);
+
+    constexpr operator const value_t &() const {
+        return _items[0];
+    }
+
+    constexpr structured_t(Fn fn) {
+        build(1,fn(),_items);
+    }
+
+
+    static constexpr value_t replace_placeholder(const value_t &v, const std::initializer_list<value_t> &data) {
+        if (v.is_placeholder()) {
+            unsigned int pos = v.get_placeholder_pos();
+            if (pos < data.size()) {
+                return *(data.begin()+pos);
+            } else {
+                return nullptr;
+            }
+        } else {
+            return v;
+        }
+    }
+
+    constexpr value_t operator()(std::initializer_list<value_t> data) const {
+        if constexpr (_count == 1) {
+            return replace_placeholder(_items[0], data);
+        }
+        else {
+            auto tmp = shared_array_t<value_t>::create(_count, [&](auto from, auto){
+                for (unsigned int i = 1; i < _count; ++i) {
+                    *from = replace_placeholder(_items[i], data);
+                    ++from;
+                }
+            });
+            return value_t(tmp, is_structured);
+        }
+    }
+
+protected:
+    static constexpr Fn _c_instance = {};
+    static constexpr unsigned int calc_space(const value_t &val) {
+        return val.visit([&](auto item){
             using T = std::decay_t<decltype(item)>;
             if constexpr(std::is_same_v<T, array_view>) {
                 unsigned int cnt = 1;
-                for (const auto &x: item) cnt += calc_space_fn(x);
+                for (const auto &x: item) cnt += calc_space(x);
                 return cnt;
             } else if constexpr(std::is_same_v<T, object_view>) {
                 unsigned int cnt = 1;
-                for (const auto &x: item) cnt += 1+calc_space_fn(x.value);
+                for (const auto &x: item) cnt += 1+calc_space(x.value);
                 return cnt;
             } else  {
                 return 1U;
             }
         });
     }
-
-    template<auto source_fn>
-    inline constexpr unsigned int calc_space = ([](){
-        return calc_space_fn(source_fn());
-    })();
-
-
-}
-
-template<auto N>
-class structured;
-
-template<unsigned int N>
-class structured_n {
-public:
-
-    constexpr void reserved_size_mismatch(unsigned int n) {
-        throw n;
-    }
-
-    constexpr structured_n(const value_t &val) {
-        unsigned int pos = build(1, val, _items);
-        if (pos != N) {
-            reserved_size_mismatch(pos);
-        }
-    }
-
-    constexpr structured_n(const std::initializer_list<_details::list_item> &list):structured_n(value_t(list)) {}
-
-    constexpr operator const value_t &() const {
-        return _items[0];
-    }
-    constexpr operator value_t() const {
-        return _items[0];
-    }
-
-protected:
-    value_t _items[N];
+    static constexpr unsigned int _count = calc_space(_c_instance());
+    value_t _items[_count] = {};
 
     constexpr unsigned int build(unsigned int pos, const value_t &val, value_t *trg) {
         return val.visit([&](const auto &item){
             using T = std::decay_t<decltype(item)>;
             if constexpr(std::is_same_v<T, array_view>) {
                 value_t *wr = _items+pos;
-                *trg = value_t::create_array_view(wr, item.size());
+                *trg = value_t::create_array_view_relative(wr-trg, item.size());
                 pos+=item.size();
                 std::for_each(item.begin(), item.end(), [&](const value_t &v){
                     pos = build(pos, v, wr);
@@ -1357,7 +1426,7 @@ protected:
             }
             else if constexpr(std::is_same_v<T, object_view>) {
                 value_t *wr = _items+pos;
-                *trg = value_t::create_object_view(wr, item.size());
+                *trg = value_t::create_object_view_relative(wr-trg, item.size());
                 pos+=item.size()*2;
                 std::for_each(item.begin(), item.end(), [&](const key_value_t &v){
                     *wr = v.key;
@@ -1373,19 +1442,6 @@ protected:
     }
 };
 
-template<auto N>
-requires std::is_integral_v<decltype(N)>
-class structured<N>: public structured_n<N> {
-public:
-    using structured_n<N>::structured_n;
-};
-
-template<auto N>
-requires std::is_invocable_v<decltype(N)>
-class structured<N>: public structured_n<_details::calc_space<N> > {
-public:
-   constexpr structured():structured_n<_details::calc_space<N> >(N()) {}
-};
 
 template<unsigned int N>
 constexpr value_t::value_t(const value_t (&arr)[N])
@@ -1495,6 +1551,7 @@ template std::string value_t::as<std::string>() const;
 using type = type_t;
 using value = value_t;
 using key_value = key_value_t;
+template<std::invocable<> Fn>  using structured = structured_t<Fn>;
 
 }
 

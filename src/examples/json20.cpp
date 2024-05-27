@@ -42,6 +42,8 @@ void print(const value &el) {
             std::cout << "}";
         } else if constexpr(std::is_same_v<T, binary_string_view_t>) {
             std::cout <<  el.as<std::string>();
+        } else if constexpr(std::is_same_v<T, json::placeholder_view>) {
+            std::cout << "${" << item.position << "}";
         } else {
             std::cout <<  item;
         }
@@ -55,6 +57,26 @@ void println(const value &el) {
 
 
 }
+
+
+template<typename Fn>
+class TestConstFn {
+public:
+
+    constexpr TestConstFn(Fn &&fn) {
+        std::string_view txt = fn();
+        std::copy(txt.begin(), txt.end(), _buffer);
+    }
+
+    std::string_view get_string() const {return {_buffer,len};}
+
+
+protected:
+    static constexpr Fn _dummy_instance;
+    static constexpr unsigned int len = std::string_view(_dummy_instance()).length();
+    char _buffer[len];
+
+};
 
 /*
 
@@ -95,17 +117,20 @@ void hexDump(const std::string& input) {
 }
 
 
-constexpr auto testjson_structured = []{return json::structured<[]{return json::value({
+constexpr json::structured_t testjson_structured = []{return json::value{
         {"ahoj","nazdar"},
         {"val",10},
-        {"array",{"jedna",2,3.14}},
+        {"array",{"jedna",2,3.14, json::placeholder<1>}},
         {"object",{
                 {"key","value"},
-                {"item",123.4567}
-        }}
-});}>();}();
+                {"item",123.4567},
+                {"pos3", json::placeholder<2>}
+        }},
+        {"pos1",json::placeholder<0>}
+};
+};
 
-constexpr const json::value &testjson = testjson_structured;
+constexpr json::value testjson = testjson_structured;
 
 constexpr auto test_obj = ([]{return json::object ({
         {"axy",10},
@@ -114,10 +139,17 @@ constexpr auto test_obj = ([]{return json::object ({
 });})();
 
 
+constexpr TestConstFn test_str = []{return "ahoj lidi";};
+
 int main() {
 
+    auto updated = testjson_structured({10,20,30});
+
+
+    std::cout << json::value(0.00000012345).to_json() << std::endl;
+    std::cout << test_str.get_string() << std::endl;
     std::cout << (test_obj["axy"].as<int>() == 10) << std::endl;
-    std::cout << testjson.to_json() << std::endl;
+    std::cout << updated.to_json() << std::endl;
     std::cout << test_obj.to_json() << std::endl;
 
     json::value vtest({

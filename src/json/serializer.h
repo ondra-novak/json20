@@ -167,10 +167,15 @@ protected:
         if (fracp >= min_frac_to_render) {
             _buffer.clear();
             _buffer.push_back('.');
-            while (fracp >= min_frac_to_render && fracp <= (1.0-min_frac_to_render)) {
+            while (fracp >= min_frac_to_render) {
                 fracp *= 10;
                 unsigned int vv = static_cast<int>(fracp);
                 fracp -= vv;
+                if (fracp >= (1.0-min_frac_to_render) && vv < 9) {
+                    vv++;
+                    _buffer.push_back(static_cast<char>(vv) + '0');
+                    break;
+                }
                 _buffer.push_back(static_cast<char>(vv) + '0');
             }
             target(std::string_view(_buffer.data(), _buffer.size()));
@@ -223,6 +228,12 @@ protected:
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_item(const undefined_t &, Target &target) {
         target("null");
+    }
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_item(const placeholder_view &v, Target &target) {
+        target("\"${");
+        serialize_item(v.position, target);
+        target("}\"");
     }
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_item(const binary_string_view_t &data, Target &target) {
@@ -339,6 +350,17 @@ protected:
         make_tlv_tag(bin_element_t::num_string, v.size(), target);
         target(v);
     }
+
+    template<std::invocable<std::string_view> Target>
+    constexpr void serialize_binary_item(const placeholder_view &plc, Target &target) {
+        char buff[3];
+        buff[0] = static_cast<char>(bin_element_t::placeholder);;
+        buff[1] = plc.position & 0xFF;
+        buff[2] = (plc.position>>8) & 0xFF;
+        target(std::string_view(buff,3));
+
+    }
+
 
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary_item(const std::nullptr_t &, Target &target) {
