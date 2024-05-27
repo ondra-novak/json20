@@ -169,36 +169,6 @@ constexpr unsigned char example_binary_data_decoded[] = {'l','i','g','h','t',' '
 
 constexpr auto test_binary_data = check(static_cast<binary_string_view_t>(example_binary_data) == binary_string_view_t(example_binary_data_decoded, sizeof(example_binary_data_decoded)));
 
-constexpr value t = true;
-constexpr value val1 = 1;
-constexpr value xx[2] = {"100",32};
-constexpr value test_array[] = {"100",45,false, nullptr};
-constexpr value test_array2[] = {test_array, "cus"};
-
-constexpr value test_array_val = test_array2;
-
-
-constexpr value test_arr = test_array;
-
-constexpr bool test_constexpr_obj = []{
-
-        object test_obj ({
-                {"axy",10},
-                {"zsee",85},
-                {"sub_test", test_array},
-                {"sub_test2", test_array2}
-        });
-
-        check(test_arr[0].as<std::string_view>() == "100");
-        check(test_obj["axy"].as<int>() == 10);
-        check(test_obj["zsee"].as<int>() == 85);
-        check(test_obj["sub_test"][0].as<std::string_view>() == "100");
-        check(test_obj["sub_test"][1].as<int>() == 45);
-        check(test_obj["sub_test2"][0][1].as<int>() == 45);
-
-
-        return true;
-}();
 
 
 constexpr bool serialize_json_0 = []{

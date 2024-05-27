@@ -1,4 +1,6 @@
-#include <json20.h>
+#include "../json/value.h"
+#include "../json/parser.h"
+#include "../json/serializer.h"
 
 #include <iostream>
 #include <iomanip>
@@ -27,15 +29,15 @@ void print(const value &el) {
             std::cout << "{";
             auto iter = item.begin();
             if (iter != item.end()) {
-                print(iter->key);
+                print(iter.key());
                 std::cout << ':';
-                print(iter->value);
+                print(*iter);
                 ++iter;
                 while (iter != item.end()) {
                     std::cout << ',';
-                print(iter->key);
+                print(iter.key());
                 std::cout << ':';
-                print(iter->value);
+                print(*iter);
                  ++iter;
                 }
             }
@@ -117,6 +119,7 @@ void hexDump(const std::string& input) {
 }
 
 
+#if 0
 constexpr json::structured_t testjson_structured = []{return json::value{
         {"ahoj","nazdar"},
         {"val",10},
@@ -140,17 +143,26 @@ constexpr auto test_obj = ([]{return json::object ({
 
 
 constexpr TestConstFn test_str = []{return "ahoj lidi";};
-
+#endif
 int main() {
 
-    auto updated = testjson_structured({10,20,30});
+    std::vector<int> vect= {1,2,5,3,2,0,10,4,0,4};
+    std::sort(json::pair_iterator<int>(vect.data()), json::pair_iterator<int>(vect.data()+vect.size()),
+            [](const std::pair<int,int> &a, const std::pair<int,int> &b){
+        return a.first < b.first;
+    });
+
+    for (auto &x: vect) std::cout << " " << x;
+    std::cout << std::endl;
+
+//    auto updated = testjson_structured({10,20,30});
 
 
     std::cout << json::value(0.00000012345).to_json() << std::endl;
-    std::cout << test_str.get_string() << std::endl;
-    std::cout << (test_obj["axy"].as<int>() == 10) << std::endl;
-    std::cout << updated.to_json() << std::endl;
-    std::cout << test_obj.to_json() << std::endl;
+//    std::cout << test_str.get_string() << std::endl;
+  //  std::cout << (test_obj["axy"].as<int>() == 10) << std::endl;
+//    std::cout << updated.to_json() << std::endl;
+  //  std::cout << test_obj.to_json() << std::endl;
 
     json::value vtest({
             {"jmeno","franta"},
@@ -178,13 +190,7 @@ int main() {
         });
 
     json::print({1,2,3,{},4,5,6});
-    json::value v = json::object_view({
-            {"123456789ABCDEF",1},
-            {"bbb",2}
-    });
-    std::string_view k = v[1].key();
-    std::cout << k << std::endl;
-    k = vtest[1].key();
+    std::string_view k = vtest[1].key();
     std::cout << k << std::endl;
     std::cout << sizeof(json::value) << std::endl;
     json::value vnum(json::number_string("1.2345"));
@@ -195,6 +201,7 @@ int main() {
     std::cout << static_cast<int>(vnum2.type()) << std::endl;
 
     std::string ss = vtest.to_json();
+    std::cout << ss << std::endl;
     json::parser_t prs;
     json::value out;
     prs.parse(ss.begin(), ss.end(), out);

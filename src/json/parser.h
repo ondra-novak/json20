@@ -337,7 +337,7 @@ constexpr Iter parser_t::parse_array(Iter iter, Iter end, value &out) {
             ++from;
         }
     });
-    out = value(arr);
+    out = value(arr, is_array);
     _value_stack.resize(stpos);
     ++iter;
     return iter;
@@ -376,14 +376,13 @@ constexpr Iter parser_t::parse_object(Iter iter, Iter end, value &out) {
     }
     while (true);
     auto cnt = (_value_stack.size() - stpos)/2;
-    auto arr = shared_array_t<key_value>::create(cnt,[&](auto from, auto){
+    auto arr = shared_array_t<value_t>::create(cnt*2,[&](auto from, auto){
         for (std::size_t i = 0; i < cnt; ++i) {
-            from->key = key_t::from_value(std::move(_value_stack[stpos+i*2]));
-            from->value = std::move(_value_stack[stpos+i*2+1]);
-            ++from;
+            *from++ = std::move(_value_stack[stpos+i*2]);
+            *from++ = std::move(_value_stack[stpos+i*2+1]);
         }
     });
-    out = value(arr);
+    out = value(arr, is_object);
     _value_stack.resize(stpos);
     ++iter;
     return iter;
@@ -465,17 +464,18 @@ constexpr Iter parser_t::parse_binary(Iter iter, Iter end, value &out) {
                     iter = parse_binary(iter, end, *wr);
                     ++wr;
                 }
-            }));
+            }), is_array);
             return iter;
         case bin_element_t::object:
             iter = parse_len(iter, end, len);
-            out = value(shared_array_t<key_value> ::create(len,[&](auto wr, auto wrend){
+            out = value(shared_array_t<value_t> ::create(len*2,[&](auto wr, auto wrend){
                 while (iter != end && wr != wrend) {
-                    iter = parse_binary(iter, end, wr->key);
-                    iter = parse_binary(iter, end, wr->value);
+                    iter = parse_binary(iter, end, *wr);
+                    ++wr;
+                    iter = parse_binary(iter, end, *wr);
                     ++wr;
                 }
-            }));
+            }), is_object);
             return iter;
         default: throw parse_error_t(parse_error_t::unexpected_character, iter);
     }

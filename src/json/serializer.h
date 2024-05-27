@@ -268,15 +268,15 @@ protected:
         else {
             target("{");
             auto iter = data.begin();
-            serialize_item(iter->key.str(), target);
+            serialize_item(iter.key(), target);
             target(":");
-            serialize(iter->value, target);
+            serialize(*iter, target);
             ++iter;
             while (iter != data.end()) {
                 target(",");
-                serialize_item(iter->key.str(), target);
+                serialize_item(iter.key(), target);
                 target(":");
-                serialize(iter->value, target);
+                serialize(*iter, target);
                 ++iter;
             }
             target("}");
@@ -389,9 +389,9 @@ protected:
     template<std::invocable<std::string_view> Target>
     constexpr void serialize_binary_item(const object_view &data, Target &target) {
         make_tlv_tag(bin_element_t::object, data.size(), target);
-        for (const key_value &v: data) {
-            serialize_binary_no_mark(v.key, target);
-            serialize_binary_no_mark(v.value, target);
+        for (auto iter = data.begin(); iter != data.end(); ++iter) {
+            serialize_binary_no_mark(iter.key(), target);
+            serialize_binary_no_mark(*iter, target);
         }
     }
 
