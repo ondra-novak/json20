@@ -53,27 +53,32 @@ namespace _details {
 
 template<unsigned int N> struct placeholder_t {
     static constexpr unsigned int position = N;
+    static_assert(N > 0);
 };
 
 template<unsigned int N>
 static constexpr placeholder_t<N> placeholder = {};
+template<unsigned int N>
+static constexpr placeholder_t<N> __ = {};
 
 struct is_array_t {};
 static constexpr is_array_t is_array{};
 struct is_object_t {};
 static constexpr is_object_t is_object{};
-struct is_structured_t {};
-static constexpr is_structured_t is_structured {};
 
 class value_t;
-template<unsigned int N> class array;
-template<unsigned int N> class object;
+using key_value_t = std::pair<std::string_view, value_t>;
+template<unsigned int N> class array_t;
+template<unsigned int N> class object_t;
 
 using array_view = std::span<const value_t>;
 using object_view = object_view_gen<value_t>;
 
 struct placeholder_view {
     unsigned int position;
+    constexpr bool operator==(const placeholder_view &other) const {
+        return position == other.position;
+    }
 };
 
 /*
@@ -181,12 +186,38 @@ public:
      * @param arr pointer to array as shared_array object. The ownership is transfered to
      * the value_t
      */
-    explicit constexpr value_t(shared_array_t<value_t> *arr, is_array_t):_data{shared_array, 0, 0, {.shared_array = arr}} {}
-    explicit constexpr value_t(shared_array_t<value_t> *arr, is_object_t):_data{shared_object, 0, 0, {.shared_array = arr}} {
+    constexpr value_t(shared_array_t<value_t> *arr, is_array_t):_data{shared_array, 0, 0, {.shared_array = arr}} {}
+    ///construct object from shared array
+    /**
+     * @param arr pointer to array as shared_array object. The array must contain
+     * keys and values in interleave order. Keys are allowed only strings
+     *
+     */
+    constexpr value_t(shared_array_t<value_t> *arr, is_object_t):_data{shared_object, 0, 0, {.shared_array = arr}} {
         sort_object(_data.shared_array->begin(), _data.shared_array->end());
     }
 
-    explicit constexpr value_t(shared_array_t<value_t> *arr, is_structured_t):_data{shared_structured, 0, 0, {.shared_array = arr}} {}
+    ///construct view on array
+    /**
+     * @param view pointer to a first item of an unspecified array
+     * @param count count of items in array
+     *
+     * @note as it is view, you must ensure, that target object will not
+     * be destroyed prior end of lifetime of this element
+     */
+    constexpr value_t(const value_t *view, std::uint32_t count, is_array_t):_data{const_array, 0, count, {.const_array = view}} {}
+    ///construct view on array
+    /**
+     * @param view pointer to a first item of an unspecified array, must contains
+     * keys and values in interleaved order. Keys must be represented as strings.
+     * @param count count of items in array (keys and values in total, so number
+     * is always even
+     *
+     * @note as it is view, you must ensure, that target object will not
+     * be destroyed prior end of lifetime of this element
+     */
+    constexpr value_t(const value_t *view, std::uint32_t count, is_object_t):_data{const_object, 0, count, {.const_array = view}} {}
+
     ///construct string from shared string buffer
     /**
      *
@@ -202,25 +233,21 @@ public:
      * @param str string buffer - pointer ownership is transfered
      */
     constexpr value_t(shared_array_t<unsigned char> *str):_data{binary_string, 0, 0, {.shared_bin_str = str}} {}
-/*
+
+    ///constrcut string view
+    /**
+     * @param view pointer to memory where string is constructed
+     * @param count count of characters
+     * @note doesn't copy the string
+     */
+    constexpr value_t(const char *view, std::uint32_t count, bool number):_data{number?num_string_view:string_view,0, count, {.str_view = view}} {}
+
+    constexpr value_t(const unsigned char *view, std::uint32_t count):_data{binary_string_view,0, count, {.bin_str_view = view}} {}
+
 
     template<std::forward_iterator Iter, std::invocable<std::iter_value_t<Iter> > Fn>
-    constexpr value_t(Iter begin, Iter end, Fn &&fn) {
-        using RetV = std::decay_t<std::invoke_result_t<Fn, decltype(*begin)> >;
-        using T = std::conditional_t<std::is_same_v<RetV, key_value_t>, RetV,
-                std::conditional_t<std::is_same_v<RetV, char>, RetV, value_t> >;
-        auto arr = shared_array_t<T>::create(std::distance(begin,end), [&](auto beg, auto){
-            std::transform(begin, end, beg, std::forward<Fn>(fn));
-        });
-        if constexpr(std::is_same_v<T, key_value_t>) {
-           std::construct_at(&_data, Data{shared_object,0,0,{.shared_object = arr}});
-        } else if constexpr(std::is_same_v<T, char>) {
-           std::construct_at(&_data, Data{string,0,0,{.shared_str= arr}});
-        } else {
-           std::construct_at(&_data, Data{shared_array,0,0,{.shared_array = arr}});
-        }
-    }
-*/
+    constexpr value_t(Iter beg, Iter end, Fn &&fn):value_t(transform(beg, end, std::forward<Fn>(fn))) {}
+
     ///Construct string
     /**
      * @param text text to construct
@@ -305,61 +332,6 @@ public:
             case type_t::array: std::construct_at(&_data, Data{const_array,0,0,{.const_array = nullptr}}); break;
             case type_t::object: std::construct_at(&_data, Data{const_object,0,0,{.const_array= nullptr}}); break;
         }
-    }
-
-    ///Construct string view
-    /**
-     * The object value_t is able to hold reference to preallocated string. You
-     * must keep this string valid for whole lifetime of the object
-     * @param txt preallocated string
-     * @return value
-     */
-    static constexpr value_t create_string_view(std::string_view txt) {
-        value_t out;
-        out._data.type = string_view;
-        out._data.size = static_cast<std::uint32_t>(txt.size());
-        out._data.str_view = txt.data();
-        return out;
-    }
-
-    ///Construct array view - used int constexpr evaluation
-    static constexpr value_t create_array_view(const value_t *array, std::size_t count) {
-        value_t out;
-        out._data.type = const_array;
-        out._data.size = static_cast<std::uint32_t>(count);
-        out._data.const_array = array;
-        return out;
-    }
-    ///Construct object view - used int constexpr evaluation
-    /** @note result is not const expression - it cannot be used in constexpr evaluation
-     *
-     * @param object pointer to object, stored in array, as key, value interleaved
-     * @param count count of pairs
-     * @return value (not constexpr - reinterpret_cast is used)
-     */
-    static constexpr value_t create_object_view(const value_t *object, std::size_t count) {
-        value_t out;
-        out._data.type = const_object;
-        out._data.size = static_cast<std::uint32_t>(count);
-        out._data.const_array = object;
-        return out;
-    }
-
-
-    static constexpr value_t create_array_view_relative(int relative_pos, std::size_t count) {
-        value_t out;
-        out._data.type = const_array_rel;
-        out._data.size = static_cast<std::uint32_t>(count);
-        out._data.ptr_rel = relative_pos;
-        return out;
-    }
-
-    static constexpr value_t create_object_view_relative(int relative_pos, std::size_t count) {
-        value_t out;
-        out._data.type = const_object_rel;
-        out._data.size = static_cast<std::uint32_t>(count);
-        out._data.ptr_rel = relative_pos;
-        return out;
     }
 
     ///Visit the value
@@ -476,10 +448,8 @@ public:
             case string_view:
             case string: return type_t::string;
             case shared_array:
-            case const_array_rel:
             case const_array: return type_t::array;
             case shared_object:
-            case const_object_rel:
             case const_object: return type_t:: object;
             case boolean: return type_t::boolean;
             case vint:
@@ -492,7 +462,6 @@ public:
             case num_string_view:
             case num_string: return type_t::number;
             case placeholder: return type_t::undefined;
-            case shared_structured: return _data.shared_array->begin()->type();
             default:
                 return _str.isnum?type_t::number: type_t::string;
         }
@@ -630,6 +599,20 @@ public:
     value_t merge_objects(const value_t &val) const;
     value_t merge_objects_recursive(const value_t &val) const;
 
+    ///determines, whether other object is copy of current object
+    /**
+     * This can be used to detect changes in containers. If the
+     * value is not copy of original value, something has changed, and
+     * the new value contains an update.
+     *
+     * @param other to test
+     * @retval true other argument is copy of this object. It means, that
+     * containers shares the same content. For non containers, standard
+     * comparison is used.
+     */
+    constexpr bool is_copy_of(const value_t &other) const;
+
+
 
 
     template<typename Iter>
@@ -643,6 +626,25 @@ public:
     constexpr unsigned int get_placeholder_pos() const {
         return _data.placeholder_pos;
     }
+
+    constexpr value_t operator()(const std::initializer_list<value_t> &list) const;
+
+
+    struct compact_info {
+        std::size_t element_count = 0;
+        std::size_t string_buffer_size = 0;
+        std::size_t binary_buffer_size = 0;
+    };
+
+    struct compact_pointers {
+        value_t *elements;
+        char *string_buffer;
+        unsigned char *binary_buffer;
+    };
+
+    constexpr void compact(compact_pointers &ptrs);
+    constexpr void compact(compact_pointers &&ptrs) {compact(ptrs);}
+    constexpr compact_info compact_calc_space() const;
 
 protected:
 
@@ -661,8 +663,6 @@ protected:
         shared_array,
         ///object allocated/shared
         shared_object,
-        ///shared structured block
-        shared_structured,
         ///boolean value
         boolean,
         ///signed int
@@ -693,10 +693,6 @@ protected:
         binary_string_view,
         ///placeholder
         placeholder,
-        ///relativa const array
-        const_array_rel,
-        ///relative const object
-        const_object_rel,
     };
 
 
@@ -769,7 +765,7 @@ protected:
 
     template<std::size_t Elements, std::size_t StringBytes>
     friend class value_container_t;
-    template<unsigned int N> friend class object;
+    template<unsigned int N> friend class object_t;
     friend class _details::list_item;
 
     constexpr bool is_small_string() const {
@@ -782,7 +778,6 @@ protected:
             case num_string:
             case string: fn(_data.shared_str);break;
             case binary_string: fn(_data.shared_bin_str);break;
-            case shared_structured:
             case shared_object:
             case shared_array: fn(_data.shared_array);break;
             default:break;
@@ -790,71 +785,49 @@ protected:
 
     }
 
-};
+    //returns undefined, if no replacement was made
+    constexpr value_t replace_placeholder(const std::initializer_list<value_t> &list) const;
 
-class key_t {
-public:
+    template<bool object, typename Iter>
+    value_t find_and_replace_placeholders(Iter beg, Iter end,const std::initializer_list<value_t> &list) const;
 
-    constexpr key_t():_name("") {}
-    constexpr key_t(std::string_view name):_name(name) {}
-    template<int N>
-    constexpr key_t(const char (&name)[N]):_name(name) {}
-
-    constexpr operator std::string_view() const {
-        return _name.as<std::string_view>();
-    }
-    constexpr operator std::string() const {
-        return _name.as<std::string>();
-    }
-    constexpr operator const value_t &() const {
-        return _name;
-    }
-    constexpr operator value_t &&() && {
-        return std::move(_name);
+    template<std::forward_iterator Iter, std::invocable<std::iter_value_t<Iter> > Fn>
+    requires std::convertible_to<std::invoke_result_t<Fn, std::iter_value_t<Iter> >, value_t>
+    static value_t transform(Iter beg, Iter end, Fn &&fn) {
+        auto count = std::distance(beg, end);
+        return value_t(shared_array_t<value_t>::create(count, [&](auto from, auto){
+            for (auto iter = beg; iter != end; ++iter) {
+                *from++ = fn(*iter);
+            }
+        }),is_array);
     }
 
-
-    constexpr std::string_view str() const {
-        return _name.as<std::string_view>();
+    template<std::forward_iterator Iter, std::invocable<std::iter_value_t<Iter> > Fn>
+    requires std::convertible_to<std::invoke_result_t<Fn, std::iter_value_t<Iter> >, key_value_t>
+    static value_t transform(Iter beg, Iter end, Fn &&fn) {
+        auto count = std::distance(beg, end)*2;
+        return value_t(shared_array_t<value_t>::create(count, [&](auto from, auto){
+            for (auto iter = beg; iter != end; ++iter) {
+                auto [key, val] = fn(*iter);
+                *from++ = std::string_view(key);
+                *from++ = std::move(val);
+            }
+        }),is_object);
     }
 
-    constexpr static key_t from_value(const value_t &value) {
-        return key_t(value);
-    }
-    constexpr static key_t from_value(value_t &&value) {
-        return key_t(std::move(value));
-    }
-
-    ///compare keys - use template to solve ambiguity
-    template<std::same_as<key_t> Key>
-    constexpr bool operator==(const Key &other) const {
-        return str() == other.str();
-    }
-    ///compare keys - use template to solve ambiguity
-    template<std::same_as<key_t> Key>
-    constexpr int operator<=>(const Key &other) const {
-        return str().compare(other.str());
-    }
-
-
-
-protected:
-    constexpr key_t(const value_t &val):_name(val) {}
-
-    value_t _name;
 };
 
 
 
 template<typename Iter>
 constexpr void value_t::sort_object(Iter beg, Iter end) {
-    pair_iterator<value_t> pbeg(&(*beg));
-    pair_iterator<value_t> pend(&(*end));
-    std::sort(pbeg, pend,[&](const std::pair<value_t, value_t> &a, const std::pair<value_t, value_t> &b){
-        return a.first.template as<std::string_view>() < b.first.template as<std::string_view>();
+    pair_iterator pbeg(beg);
+    pair_iterator pend(end);
+    std::sort(pbeg, pend,[&](const auto &a, const auto &b){
+        return a.first().template as<std::string_view>() < b.first().template as<std::string_view>();
     });
-    std::for_each(pbeg, pbeg, [](std::pair<value_t &, value_t &> x){
-        x.second.mark_has_key();
+    std::for_each(pbeg, pbeg, [](auto &x){
+        x.second().mark_has_key();
     });
 }
 
@@ -866,10 +839,10 @@ inline constexpr value_t::value_t(const array_view &arr)
 
 inline constexpr value_t::value_t(const object_view &obj)
 :_data{shared_object, 0, 0,{.shared_array = shared_array_t<value_t>::create(obj.size()*2, [&](auto from, auto ){
-    for (auto iter = obj.begin(); iter != obj.end(); ++iter) {
-        *from++ = iter.key();
-        *from++ = *iter;
-    }
+    std::for_each(obj.begin(), obj.end(), [&](object_view::iterator::reference val){
+        *from++ = val.key;
+        *from++ = val.value;
+    });
 })}} {
     sort_object(_data.shared_array->begin(), _data.shared_array->end());
 }
@@ -952,8 +925,6 @@ inline constexpr decltype(auto) value_t::visit(Fn &&fn) const {
         case shared_object: return fn(object_view(_data.shared_array->begin(), _data.shared_array->end()));
         case const_array: return fn(array_view(_data.const_array, _data.size));
         case const_object: return fn(object_view(_data.const_array, _data.size));
-        case const_array_rel: return fn(array_view(this+_data.ptr_rel, _data.size));
-        case const_object_rel: return fn(object_view(this+_data.ptr_rel, _data.size));
         case boolean: return fn(_data.b);
         case vint: return fn(_data.vint);
         case vuint: return fn(_data.vuint);
@@ -967,7 +938,6 @@ inline constexpr decltype(auto) value_t::visit(Fn &&fn) const {
         case binary_string_view: return fn(binary_string_view_t({_data.bin_str_view,_data.size}));
         case binary_string: return fn(binary_string_view_t({_data.shared_bin_str->begin(),_data.shared_bin_str->end()}));
         case placeholder: return fn(placeholder_view{_data.placeholder_pos});
-        case shared_structured: return _data.shared_array->begin()->visit(std::forward<Fn>(fn));
         default:
             return _str.isnum?fn(number_string({_str.str, _str.size})):fn(std::string_view(_str.str, _str.size));
     }
@@ -1153,19 +1123,18 @@ constexpr const value_t &value_t::operator[](std::string_view val) const {
     return visit([&](const auto &x) -> const value_t & {
         using T = std::decay_t<decltype(x)>;
         if constexpr(std::is_same_v<T, object_view>) {
-            object_view::iterator beg = object_view::value2key(x.begin());
-            object_view::iterator end = object_view::value2key(x.end());
+            auto beg = x.begin();
+            auto end = x.end();
             auto iter = std::lower_bound(beg, end, val, [](const auto &a, const auto &b){
                 using A = std::decay_t<decltype(a)>;
-                if constexpr(std::is_same_v<A, value_t>) {
-                    return a.template as<std::string_view>() < b;
+                if constexpr(std::is_same_v<A, std::string_view>) {
+                    return a < b.key;
                 } else {
-                    return a < b.template as<std::string_view>();
+                    return a.key < b;
                 }
             });
-            if (iter == end || iter->template as<std::string_view>() != val) return undefined;
-            auto r = object_view::key2value(iter);
-            return *r;
+            if (iter == end || iter->key != val) return undefined;
+            return iter->value;
         } else {
             return undefined;
         }
@@ -1178,7 +1147,7 @@ constexpr std::string_view value_t::key_at(std::size_t pos) const {
         using T = std::decay_t<decltype(x)>;
         if constexpr(std::is_same_v<T, object_view>) {
             if (pos >= x.size()) return {};
-            return x.key_at(pos);
+            return x[pos].key;
         } else {
             return {};;
         }
@@ -1208,11 +1177,7 @@ inline constexpr bool value_t::operator==(const value_t &other) const {
         case type_t::object: {
             object_view obj1 = as<object_view>();
             object_view obj2 = other.as<object_view>();
-            return std::equal(obj1.begin(), obj1.end(),obj2.begin(), obj2.end())
-            && std::equal(object_view::value2key(obj1.begin()),
-                    object_view::value2key(obj1.end()),
-                    object_view::value2key(obj2.begin()),
-                    object_view::value2key(obj2.end()));
+            return std::equal(obj1.begin(), obj1.end(),obj2.begin(), obj2.end());
         }
         default: return false;
     }
@@ -1244,15 +1209,15 @@ inline constexpr value_t::iterator_t value_t::end() const {
 }
 
 template<unsigned int N>
-class array: public value_t {
+class array_t: public value_t {
 public:
 
-    constexpr array(const std::initializer_list<value_t> &items):
-        value_t(value_t::create_array_view(_items, N)) {
+    constexpr array_t(const std::initializer_list<value_t> &items):
+        value_t(_items, N, is_array) {
         std::copy(std::begin(items), std::end(items), std::begin(_items));
     }
-    constexpr array(const value_t (&items)[N]):
-        value_t(value_t::create_array_view(_items, N)) {
+    constexpr array_t(const value_t (&items)[N]):
+        value_t(_items, N, is_array) {
         std::copy(std::begin(items), std::end(items), std::begin(_items));
     }
 
@@ -1263,11 +1228,24 @@ protected:
 
 
 template<unsigned int N>
-class object: public value_t {
+class object_t: public value_t {
 public:
 
-    constexpr object(const std::initializer_list<std::pair<std::string_view,value_t> > &items):
-        value_t(value_t::create_object_view_relative(1, N*2)) {
+    constexpr object_t(const std::initializer_list<std::pair<std::string_view,value_t> > &items):
+        value_t(_items, N*2, is_object) {
+        do_copy(items);
+    }
+
+    constexpr object_t(const std::pair<std::string_view,value_t> (&items)[N]):
+        value_t(_items, N*2, is_object) {
+        do_copy(items);
+    }
+
+protected:
+    value_t _items[N*2] = {};
+
+    template<typename X>
+    constexpr void do_copy(const X &items) {
         unsigned int pos = 0;
         for (const auto &[key, value]: items) {
             _items[pos] = key;
@@ -1277,110 +1255,32 @@ public:
         value_t::sort_object(std::begin(_items), std::end(_items));
     }
 
-protected:
-    value_t _items[N*2] = {};
 };
 
+template<unsigned int N>
+array_t(const value_t (&v)[N]) -> array_t<N>;
 
 template<unsigned int N>
-array(const value_t (&v)[N]) -> array<N>;
+object_t(const std::pair<std::string_view, value_t> (&)[N]) -> object_t<N>;
 
-template<unsigned int N>
-object(const std::pair<std::string_view, value_t> (&)[N]) -> object<N>;
 
 
 template<std::invocable<> Fn>
-class structured_t {
+class structured_t : public value_t{
 public:
 
     static_assert(std::is_same_v<std::invoke_result_t<Fn>, value_t>);
 
-    constexpr operator const value_t &() const {
-        return _items[0];
-    }
-
-    constexpr structured_t(Fn fn) {
-        build(1,fn(),_items);
-    }
-
-
-    static constexpr value_t replace_placeholder(const value_t &v, const std::initializer_list<value_t> &data) {
-        if (v.is_placeholder()) {
-            unsigned int pos = v.get_placeholder_pos();
-            if (pos < data.size()) {
-                return *(data.begin()+pos);
-            } else {
-                return nullptr;
-            }
-        } else {
-            return v;
-        }
-    }
-
-    constexpr value_t operator()(std::initializer_list<value_t> data) const {
-        if constexpr (_count == 1) {
-            return replace_placeholder(_items[0], data);
-        }
-        else {
-            auto tmp = shared_array_t<value_t>::create(_count, [&](auto from, auto){
-                for (unsigned int i = 1; i < _count; ++i) {
-                    *from = replace_placeholder(_items[i], data);
-                    ++from;
-                }
-            });
-            return value_t(tmp, is_structured);
-        }
+    constexpr structured_t(Fn fn):value_t(fn()) {
+        this->compact(compact_pointers{_items,_buffer,_bbuffer});
     }
 
 protected:
     static constexpr Fn _c_instance = {};
-    static constexpr unsigned int calc_space(const value_t &val) {
-        return val.visit([&](auto item){
-            using T = std::decay_t<decltype(item)>;
-            if constexpr(std::is_same_v<T, array_view>) {
-                unsigned int cnt = 1;
-                for (const auto &x: item) cnt += calc_space(x);
-                return cnt;
-            } else if constexpr(std::is_same_v<T, object_view>) {
-                unsigned int cnt = 1;
-                for (const auto &x: item) cnt += 1+calc_space(x);
-                return cnt;
-            } else  {
-                return 1U;
-            }
-        });
-    }
-    static constexpr unsigned int _count = calc_space(_c_instance());
-    value_t _items[_count] = {};
-
-    constexpr unsigned int build(unsigned int pos, const value_t &val, value_t *trg) {
-        return val.visit([&](const auto &item){
-            using T = std::decay_t<decltype(item)>;
-            if constexpr(std::is_same_v<T, array_view>) {
-                value_t *wr = _items+pos;
-                *trg = value_t::create_array_view_relative(wr-trg, item.size());
-                pos+=item.size();
-                std::for_each(item.begin(), item.end(), [&](const value_t &v){
-                    pos = build(pos, v, wr);
-                    ++wr;
-                });
-            }
-            else if constexpr(std::is_same_v<T, object_view>) {
-                value_t *wr = _items+pos;
-                *trg = value_t::create_object_view_relative(wr-trg, item.size());
-                pos+=item.size()*2;
-                for (auto iter = item.begin(); iter != item.end(); ++iter) {
-                    *wr = iter.key();
-                    ++wr;
-                    pos = build(pos, *iter, wr);
-                    ++wr;
-                }
-            }else {
-                *trg = val;
-            }
-            return pos;
-        });
-    }
+    static constexpr value_t::compact_info _cinfo = _c_instance().compact_calc_space();
+    value_t _items[_cinfo.element_count] = {};
+    char _buffer[std::max<std::size_t>(1,_cinfo.string_buffer_size)] = {};
+    unsigned char _bbuffer[std::max<std::size_t>(1,_cinfo.binary_buffer_size)] = {};
 };
 
 template<typename ConflictSolver>
@@ -1396,38 +1296,38 @@ inline value_t value_t::merge_objects(const value_t &val,ConflictSolver &&fn) co
         auto ib = b.begin();
         auto eb = b.end();
         while (ia != ea && ib != eb) {
-            std::string_view sa = ia.key();
-            std::string_view sb = ib.key();
-            const value_t &va = *ia;
-            const value_t &vb = *ib;
-            if (sa<sb) {
-                *beg++ = sa;
-                *beg++= va;
+            const auto &va = *ia;
+            const auto &vb = *ib;
+            if (va.key<vb.key) {
+                *beg++ = va.key;
+                *beg++= va.value;
                 ++ia;
-            } else if (sa > sb) {
-                if (vb.defined()) {
-                    *beg++ = sb;
-                    *beg++ = vb;
+            } else if (va.key > vb.key) {
+                if (vb.value.defined()) {
+                    *beg++ = vb.key;
+                    *beg++ = vb.value;
                 }
                 ++ib;
             } else {
-                if (vb.defined()) {
-                    *beg++ = sb;
-                    *beg++ = fn(va,vb);
+                if (vb.value.defined()) {
+                    *beg++ = vb.key;
+                    *beg++ = fn(va.value,vb.value);
                 }
                 ++ia;
                 ++ib;
             }
         }
         while (ia != ea) {
-            *beg++ = ia.key();
-            *beg++ = *ia;
+            const auto &va = *ia;
+            *beg++ = va.key;
+            *beg++ = va.value;
             ++ia;
         }
         while (ib != eb) {
-            if (ib->defined()) {
-                *beg++ = ib.key();
-                *beg++ = *ib;
+            const auto &vb = *ib;
+            if (vb.value.defined()) {
+                *beg++ = vb.key;
+                *beg++ = vb.value;
             }
            ++ib;
         }
@@ -1463,11 +1363,84 @@ void value_t::set(const std::pair<std::string_view, value_t> (&list)[N]) {
         tmp[i*2] = list[i].first;
         tmp[i*2+1] = list[i].second;
     }
-    value_t obj = value_t::create_object_view(tmp, N*2);
+    value_t obj(tmp, N*2,is_object);
     (*this) = this->merge_objects(obj);
 }
 
+inline constexpr bool value_t::is_copy_of(const value_t &other) const {
+    return visit([&](const auto &x){
+        using T = std::decay_t<decltype(x)>;
+        return other.visit([&](const auto &y){
+            using U = std::decay_t<decltype(y)>;
+            if constexpr(!std::is_same_v<T, U>) {
+                return false;
+            } else if constexpr(std::is_same_v<T, object_view>) {
+                return x.begin() == y.begin();
+            } else if constexpr(std::is_same_v<T, array_view>) {
+                return x.begin() == y.begin();
+            } else if constexpr(std::is_same_v<T, undefined_t>){
+                return true;
+            } else {
+                return x == y;
+            }
+        });
+    });
+}
 
+inline constexpr value_t value_t::replace_placeholder(const std::initializer_list<value_t> &list) const {
+    switch (_data.type){
+        case placeholder:
+            if (_data.placeholder_pos >= list.size()) return nullptr;
+            else return *(list.begin()+_data.placeholder_pos);
+        case shared_array:
+            return find_and_replace_placeholders<false>(_data.shared_array->begin(), _data.shared_array->end(), list);
+        case const_array:
+            return find_and_replace_placeholders<false>(_data.const_array, _data.const_array+_data.size, list);
+        case shared_object:
+            return find_and_replace_placeholders<true>(_data.shared_array->begin(), _data.shared_array->end(), list);
+        case const_object:
+            return find_and_replace_placeholders<true>(_data.const_array, _data.const_array+_data.size, list);
+        default:
+            return {};
+    }
+
+}
+
+template<bool object, typename Iter>
+inline value_t value_t::find_and_replace_placeholders(Iter beg, Iter end,const std::initializer_list<value_t> &list) const {
+    value_t first_replace;
+
+    Iter fnd = std::find_if(beg, end, [&](const value_t &val){
+        first_replace = val.replace_placeholder(list);
+        return first_replace.defined();
+    });
+
+    if (fnd != end) {
+        auto ret = shared_array_t<value_t>::create(std::distance(beg,end), [&](auto from, auto){
+            from = std::copy(beg, fnd, from);
+            *from++ = std::move(first_replace);
+            ++fnd;
+            from = std::transform(fnd, end, from, [&](const value_t &v){
+                auto tmp = v.replace_placeholder(list);
+                if (tmp.defined()) return tmp;
+                else return v;
+            });
+        });
+        if constexpr(object) {
+            return value_t(ret, is_object);
+        } else {
+            return value_t(ret, is_array);
+        }
+    }
+    return {};
+}
+
+
+inline constexpr value_t value_t::operator()(const std::initializer_list<value_t> &list) const {
+    value_t res = replace_placeholder(list);
+    if (res.defined()) return res;
+    else return *this;
+}
 
 inline std::string value_conversion_t<std::string>::operator()(const binary_string_view_t binstr) const {
     std::string out;
@@ -1481,6 +1454,91 @@ inline binary_string_t value_conversion_t<binary_string_t>::operator()(const std
     return out;
 }
 
+inline constexpr void value_t::compact(compact_pointers &ptrs) {
+    visit([&](const auto &x) {
+        using T = std::decay_t<decltype(x)>;
+        if constexpr(std::is_same_v<T, std::string_view>) {
+            if (ptrs.string_buffer) {
+                auto b = ptrs.string_buffer;
+                ptrs.string_buffer = std::copy(x.begin(), x.end(), ptrs.string_buffer);
+                *ptrs.string_buffer = 0;
+                std::string_view newstr(b, ptrs.string_buffer);
+                ++ptrs.string_buffer;
+                *this = value_t(newstr.data(), newstr.size(), false);
+            }
+        } else if constexpr(std::is_same_v<T, binary_string_view_t>) {
+            if (ptrs.binary_buffer) {
+                auto b = ptrs.binary_buffer;
+                ptrs.binary_buffer = std::copy(x.begin(), x.end(), ptrs.binary_buffer);
+                binary_string_view_t newstr(b, ptrs.binary_buffer);
+                *this = value_t(newstr.data(), newstr.size());
+            }
+        } else if constexpr(std::is_same_v<T, number_string>) {
+            if (ptrs.string_buffer) {
+                auto b = ptrs.string_buffer;
+                ptrs.string_buffer = std::copy(x.begin(), x.end(), ptrs.string_buffer);
+                *ptrs.string_buffer = 0;
+                std::string_view newstr(b, ptrs.string_buffer);
+                ++ptrs.string_buffer;
+                *this = value_t(newstr.data(), newstr.size(), true);
+            }
+        } else if constexpr(std::is_same_v<T, object_view>) {
+            auto start = ptrs.elements;
+            auto pos = ptrs.elements;
+            auto sz = x.size()*2;
+            ptrs.elements += sz;
+            for (object_view::iterator::reference v: x) {
+                *pos = v.key;
+                pos->compact(ptrs);
+                pos++;
+                *pos = v.value;
+                pos->compact(ptrs);
+                pos++;
+            }
+            *this = value_t(start, sz,is_object);
+        } else if constexpr(std::is_same_v<T, array_view>) {
+            auto start = ptrs.elements;
+            auto pos = ptrs.elements;
+            auto sz = x.size();
+            ptrs.elements += sz;
+            for (array_view::iterator::reference v: x) {
+                *pos = v;
+                pos->compact(ptrs);
+                pos++;
+            }
+            *this = value_t(start, sz, is_array);
+        }
+    });
+}
+
+inline constexpr value_t::compact_info value_t::compact_calc_space() const {
+    return visit([&](const auto &x) {
+        compact_info nfo;
+        using T = std::decay_t<decltype(x)>;
+        if constexpr(std::is_same_v<T, std::string_view> || std::is_same_v<T, number_string>) {
+                nfo.string_buffer_size+=x.size()+1;
+        } else if constexpr(std::is_same_v<T, binary_string_view_t>) {
+                nfo.binary_buffer_size+=x.size();
+        } else if constexpr(std::is_same_v<T, object_view>) {
+            for (object_view::iterator::reference v: x) {
+                auto n = v.value.compact_calc_space();
+                nfo.string_buffer_size+=v.key.size()+1+n.string_buffer_size;
+                nfo.element_count+=2+n.element_count;
+                nfo.binary_buffer_size+=n.binary_buffer_size;
+            }
+        } else if constexpr(std::is_same_v<T, array_view>) {
+            for (array_view::iterator::reference v: x) {
+                auto n = v.compact_calc_space();
+                nfo.string_buffer_size+=n.string_buffer_size;
+                nfo.element_count+=1+n.element_count;
+                nfo.binary_buffer_size+=n.binary_buffer_size;
+            }
+        }
+        return nfo;
+    });
+}
+
+
 
 //clang complains for undefined function
 template std::string value_t::as<std::string>() const;
@@ -1488,7 +1546,14 @@ template std::string value_t::as<std::string>() const;
 using type = type_t;
 using value = value_t;
 
-template<std::invocable<> Fn>  using structured = structured_t<Fn>;
+template<std::invocable<> Fn>
+constexpr auto structured(Fn &&fn) {
+    return structured_t<Fn>(std::forward<Fn>(fn));
+}
+template<unsigned int N>
+constexpr array_t<N> array(const value_t (&n)[N]) {return n;}
+template<unsigned int N>
+constexpr auto object(const std::pair<std::string_view,value_t> (&n)[N]) {return object_t<N>(n);}
 
 }
 

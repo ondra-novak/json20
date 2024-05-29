@@ -3,6 +3,7 @@
 
 #include <cstdint>
 #include <array>
+#include <tuple>
 
 namespace JSON20_NAMESPACE_NAME {
 
@@ -88,6 +89,8 @@ constexpr bool parse_json_1 = []{
         return true;
 }();
 
+constexpr auto struct_1 = structured([]{return value_t{1,2,3};});
+
 constexpr std::string_view test_json = R"json(
 {
    "abc":123,
@@ -112,7 +115,7 @@ constexpr bool test_parse = []{
         check(json["xyz"].as<double>() == 42.42);
         check(json["pole"][0].as<int>() == 1);
         check(json["text_contains_quotes"].as<std::string_view>() == "I say \"hello world\"!");
-//        check(json["smajlik"].as<std::string_view>() == "ahoj \xF0\x9F\x98\x80");
+        check(json["smajlik"].as<std::string_view>() == "ahoj \xF0\x9F\x98\x80");
 
         return true;
 }();
@@ -213,9 +216,36 @@ constexpr bool parse_json_2 = []{
         return true;
 }();
 
+constexpr auto arr_test = []{return array({1,2,3,4});}();
+
+constexpr auto obj_test = []{return object({
+            {"neco",1},
+            {"jineho",100},
+            {"bool", true},
+          });}();
 
 
+constexpr unsigned char bintxt[] = {1,2,3};
 
+constexpr auto struct_test = structured([]{
+   return value_t{
+    {"text","aaewq"},
+    {"num",123},
+    {"bin", binary_string_view_t(std::begin(bintxt), std::end(bintxt))}
+};});
+
+constexpr bool serialize_json_3 = [] {
+
+        auto txt = to_json_string([]{return value{
+           {"hello","world"},
+           {"arr",{1,2,3}},
+           {"bool",true}
+        };});
+
+        check(txt == "{\"arr\":[1,2,3],\"bool\":true,\"hello\":\"world\"}");
+        return true;
+
+}();
 
 }
 

@@ -25,7 +25,6 @@ public:
 
     static constexpr int minexp = std::numeric_limits<double>::min_exponent10;
     static constexpr int maxexp = std::numeric_limits<double>::max_exponent10;
-    static constexpr int table_size = maxexp - minexp + 1;
 
     constexpr double pow10_cont(double base, int exponent) const{
          if (exponent == 0) return 1.0;
@@ -72,8 +71,6 @@ public:
         }
     }
 
-protected:
-    double table[table_size];
 
 };
 

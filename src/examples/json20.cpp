@@ -29,15 +29,13 @@ void print(const value &el) {
             std::cout << "{";
             auto iter = item.begin();
             if (iter != item.end()) {
-                print(iter.key());
-                std::cout << ':';
-                print(*iter);
+                std::cout << iter->key << ':';
+                print(iter->value);
                 ++iter;
                 while (iter != item.end()) {
                     std::cout << ',';
-                print(iter.key());
-                std::cout << ':';
-                print(*iter);
+                std::cout << iter->key << ':';
+                print(iter->value);
                  ++iter;
                 }
             }
@@ -74,7 +72,7 @@ public:
 
 
 protected:
-    static constexpr Fn _dummy_instance;
+    static constexpr Fn _dummy_instance = {};
     static constexpr unsigned int len = std::string_view(_dummy_instance()).length();
     char _buffer[len];
 
@@ -118,22 +116,25 @@ void hexDump(const std::string& input) {
     std::cout << std::endl;
 }
 
+constexpr auto parsed_json = json::from_json_string([]{
+        return R"json([1,2,3,"ahoj", "cau",true,false,{"xyz":1}])json";
+});
 
-#if 0
-constexpr json::structured_t testjson_structured = []{return json::value{
+
+constexpr auto testjson_structured = json::structured ( []{return json::value{
         {"ahoj","nazdar"},
         {"val",10},
-        {"array",{"jedna",2,3.14, json::placeholder<1>}},
+        {"array",{"jedna",2,3.14, json::__<2>}},
         {"object",{
                 {"key","value"},
                 {"item",123.4567},
-                {"pos3", json::placeholder<2>}
+                {"pos3", json::__<3>}
         }},
-        {"pos1",json::placeholder<0>}
+        {"pos1",json::__<1>}
 };
-};
+});
 
-constexpr json::value testjson = testjson_structured;
+constexpr const json::value &testjson = testjson_structured;
 
 constexpr auto test_obj = ([]{return json::object ({
         {"axy",10},
@@ -143,25 +144,31 @@ constexpr auto test_obj = ([]{return json::object ({
 
 
 constexpr TestConstFn test_str = []{return "ahoj lidi";};
-#endif
+
+
 int main() {
 
-    std::vector<int> vect= {1,2,5,3,2,0,10,4,0,4};
-    std::sort(json::pair_iterator<int>(vect.data()), json::pair_iterator<int>(vect.data()+vect.size()),
-            [](const std::pair<int,int> &a, const std::pair<int,int> &b){
-        return a.first < b.first;
-    });
+    std::cout << parsed_json.to_json() << std::endl;
+    std::cout << testjson["ahoj"].as<std::string_view>() << std::endl;
+    std::cout << testjson.to_json() << std::endl;
 
-    for (auto &x: vect) std::cout << " " << x;
-    std::cout << std::endl;
 
-//    auto updated = testjson_structured({10,20,30});
+    std::vector<int> data = {1,2,3,4,5};
+    json::value vdata(data.begin(), data.end(), [](int v){return v;});
+
+    std::cout << vdata.to_json() << std::endl;
+
+    json::value kvdata(data.begin(), data.end(), [](int v){return std::pair(std::to_string(v),v);});
+    std::cout << kvdata.to_json() << std::endl;
+
+
+    auto updated = testjson({10,20,30});
 
 
     std::cout << json::value(0.00000012345).to_json() << std::endl;
 //    std::cout << test_str.get_string() << std::endl;
   //  std::cout << (test_obj["axy"].as<int>() == 10) << std::endl;
-//    std::cout << updated.to_json() << std::endl;
+    std::cout << updated.to_json() << std::endl;
   //  std::cout << test_obj.to_json() << std::endl;
 
     json::value vtest({
@@ -189,6 +196,13 @@ int main() {
             {"empty_array",{}}
         });
 
+    std::vector<json::value> cp_values;
+    std::vector<char> cp_string;
+
+    auto cpinfo = vtest.compact_calc_space();
+    cp_values.resize(cpinfo.element_count);
+    cp_string.resize(cpinfo.string_buffer_size);
+    vtest.compact({cp_values.data(), cp_string.data(), nullptr});
     json::print({1,2,3,{},4,5,6});
     std::string_view k = vtest[1].key();
     std::cout << k << std::endl;

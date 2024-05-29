@@ -481,4 +481,22 @@ constexpr Iter parser_t::parse_binary(Iter iter, Iter end, value &out) {
     }
 }
 
+template<typename Fn>
+class from_json_string_t: public value_t {
+public:
+
+    constexpr from_json_string_t(Fn fn):value_t(value_t::from_json(fn())) {
+        compact(compact_pointers{_elements, _strings, nullptr});
+    }
+
+protected:
+    static constexpr Fn _dummy = {};
+    static constexpr value_t::compact_info _space_needed = value_t::from_json(_dummy()).compact_calc_space();
+    value_t _elements[_space_needed.element_count] = {};
+    char _strings[std::max<std::size_t>(_space_needed.string_buffer_size,1)] = {};
+};
+
+template<typename Fn>
+constexpr auto from_json_string(Fn fn) {return from_json_string_t<Fn>(fn);}
+
 }

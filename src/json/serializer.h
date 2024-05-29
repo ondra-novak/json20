@@ -268,15 +268,15 @@ protected:
         else {
             target("{");
             auto iter = data.begin();
-            serialize_item(iter.key(), target);
+            serialize_item(iter->key, target);
             target(":");
-            serialize(*iter, target);
+            serialize(iter->value, target);
             ++iter;
             while (iter != data.end()) {
                 target(",");
-                serialize_item(iter.key(), target);
+                serialize_item(iter->key, target);
                 target(":");
-                serialize(*iter, target);
+                serialize(iter->value, target);
                 ++iter;
             }
             target("}");
@@ -390,8 +390,8 @@ protected:
     constexpr void serialize_binary_item(const object_view &data, Target &target) {
         make_tlv_tag(bin_element_t::object, data.size(), target);
         for (auto iter = data.begin(); iter != data.end(); ++iter) {
-            serialize_binary_no_mark(iter.key(), target);
-            serialize_binary_no_mark(*iter, target);
+            serialize_binary_item(iter->key, target);
+            serialize_binary_no_mark(iter->value, target);
         }
     }
 
@@ -415,6 +415,33 @@ inline constexpr std::string_view value::to_json(std::vector<char> &buffer) cons
         buffer.insert(buffer.end(), a.begin(), a.end());
     });
     return std::string_view(buffer.data()+start, buffer.size() - start);
+}
+
+template<typename Fn>
+class to_json_string_t: public std::string_view {
+public:
+
+    constexpr to_json_string_t(Fn fn):std::string_view(buffer,size) {
+        char *x = buffer;
+        serializer_t srl;
+        srl.serialize(fn(), [&](std::string_view y){
+            x = std::copy(y.begin(), y.end(), x);
+        });
+    }
+
+protected:
+    static constexpr Fn _dummy = {};
+    static constexpr std::size_t size = ([]{
+         std::vector<char> buff;
+         return _dummy().to_json(buff).size();
+    })();
+
+    char buffer[size] = {};
+};
+
+template<typename Fn>
+constexpr to_json_string_t<Fn> to_json_string(Fn fn) {
+    return to_json_string_t<Fn>(fn);
 }
 
 }
