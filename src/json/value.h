@@ -517,7 +517,7 @@ public:
         constexpr std::ptrdiff_t operator-(const iterator_t &other) const {
             return (pos - other.pos) >> shift;
         }
-        constexpr const value_t &operator *() const {return pos[1];}
+        constexpr const value_t &operator *() const {return pos[shift];}
         constexpr std::string_view key() const {return pos[0].as<std::string_view>();}
         constexpr bool operator==(const iterator_t &other) const {
             return pos == other.pos;
@@ -1201,7 +1201,7 @@ inline constexpr value_t::iterator_t value_t::end() const {
         if constexpr(std::is_same_v<T, object_view>) {
             return {x.data()+x.size()*2,1};
         } else if constexpr(std::is_same_v<T, array_view>) {
-            return {x.data(),0};
+            return {x.data()+x.size(),0};
         } else {
             return {};
         }
@@ -1334,7 +1334,7 @@ inline value_t value_t::merge_objects(const value_t &val,ConflictSolver &&fn) co
         resend = beg;
     });
     res->trunc(resend - resbeg);
-    return value_t(res);
+    return value_t(res, is_object);
 }
 
 inline value_t value_t::merge_objects(const value_t &val) const {
@@ -1363,6 +1363,7 @@ void value_t::set(const std::pair<std::string_view, value_t> (&list)[N]) {
         tmp[i*2] = list[i].first;
         tmp[i*2+1] = list[i].second;
     }
+    value_t::sort_object(std::begin(tmp), std::end(tmp));
     value_t obj(tmp, N*2,is_object);
     (*this) = this->merge_objects(obj);
 }

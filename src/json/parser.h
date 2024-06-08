@@ -148,6 +148,7 @@ constexpr Iter parser_t::parse_string(Iter iter, Iter end, value &out) {
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     if (*iter == '"') {
         out = std::string_view();
+        ++iter;
         return iter;
     }
     int first_codepoint = 0;
