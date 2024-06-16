@@ -268,16 +268,21 @@ protected:
         else {
             target("{");
             auto iter = data.begin();
-            serialize_item(iter->key, target);
-            target(":");
-            serialize(iter->value, target);
-            ++iter;
-            while (iter != data.end()) {
-                target(",");
+            while (iter != data.end() && !iter->value.defined()) ++iter;
+            if (iter  != data.end()) {
                 serialize_item(iter->key, target);
                 target(":");
                 serialize(iter->value, target);
                 ++iter;
+                while (iter != data.end()) {
+                    if (iter->value.defined()) {
+                        target(",");
+                        serialize_item(iter->key, target);
+                        target(":");
+                        serialize(iter->value, target);
+                    }
+                    ++iter;
+                }
             }
             target("}");
         }

@@ -248,6 +248,9 @@ public:
     template<std::forward_iterator Iter, std::invocable<std::iter_value_t<Iter> > Fn>
     constexpr value_t(Iter beg, Iter end, Fn &&fn):value_t(transform(beg, end, std::forward<Fn>(fn))) {}
 
+    template<std::forward_iterator Iter>
+    constexpr value_t(Iter beg, Iter end):value_t(transform(beg, end, [](const auto &x){return x;})) {}
+
     ///Construct string
     /**
      * @param text text to construct
@@ -272,6 +275,9 @@ public:
             }
         }
     }
+
+    value_t(std::string text):value_t(std::string_view(text)) {}
+
 
     ///Constructs number string
     /**
