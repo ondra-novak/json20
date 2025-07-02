@@ -508,8 +508,8 @@ public:
 
         constexpr iterator_t() = default;
         constexpr iterator_t(const value_t *pos , unsigned int shift):pos(pos), shift(shift) {}
-        constexpr iterator_t &operator++() {pos+=1<<shift;return *this;}
-        constexpr iterator_t &operator--() {pos-=1<<shift;return *this;}
+        constexpr iterator_t &operator++() {pos+=static_cast<difference_type>(1) << shift;return *this;}
+        constexpr iterator_t &operator--() {pos-=static_cast<difference_type>(1) << shift;return *this;}
         constexpr iterator_t &operator+=(difference_type n) {pos+=n<<shift;return *this;}
         constexpr iterator_t &operator-=(difference_type n) {pos-=n<<shift;return *this;}
         constexpr iterator_t operator++(int) {
@@ -1471,14 +1471,14 @@ inline constexpr void value_t::compact(compact_pointers &ptrs) {
                 *ptrs.string_buffer = 0;
                 std::string_view newstr(b, ptrs.string_buffer);
                 ++ptrs.string_buffer;
-                *this = value_t(newstr.data(), newstr.size(), false);
+                *this = value_t(newstr.data(), static_cast<uint32_t>(newstr.size()), false);
             }
         } else if constexpr(std::is_same_v<T, binary_string_view_t>) {
             if (ptrs.binary_buffer) {
                 auto b = ptrs.binary_buffer;
                 ptrs.binary_buffer = std::copy(x.begin(), x.end(), ptrs.binary_buffer);
                 binary_string_view_t newstr(b, ptrs.binary_buffer);
-                *this = value_t(newstr.data(), newstr.size());
+                *this = value_t(newstr.data(), static_cast<uint32_t>(newstr.size()));
             }
         } else if constexpr(std::is_same_v<T, number_string>) {
             if (ptrs.string_buffer) {
@@ -1487,7 +1487,7 @@ inline constexpr void value_t::compact(compact_pointers &ptrs) {
                 *ptrs.string_buffer = 0;
                 std::string_view newstr(b, ptrs.string_buffer);
                 ++ptrs.string_buffer;
-                *this = value_t(newstr.data(), newstr.size(), true);
+                *this = value_t(newstr.data(), static_cast<uint32_t>(newstr.size()), true);
             }
         } else if constexpr(std::is_same_v<T, object_view>) {
             auto start = ptrs.elements;
@@ -1502,7 +1502,7 @@ inline constexpr void value_t::compact(compact_pointers &ptrs) {
                 pos->compact(ptrs);
                 pos++;
             }
-            *this = value_t(start, sz,is_object);
+            *this = value_t(start, static_cast<uint32_t>(sz),is_object);
         } else if constexpr(std::is_same_v<T, array_view>) {
             auto start = ptrs.elements;
             auto pos = ptrs.elements;
@@ -1513,7 +1513,7 @@ inline constexpr void value_t::compact(compact_pointers &ptrs) {
                 pos->compact(ptrs);
                 pos++;
             }
-            *this = value_t(start, sz, is_array);
+            *this = value_t(start, static_cast<uint32_t>(sz), is_array);
         }
     });
 }
