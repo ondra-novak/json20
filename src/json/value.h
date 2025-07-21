@@ -981,6 +981,14 @@ struct value_conversion_t<std::string> {
     std::string operator()(std::nullptr_t) const {return {};}
 };
 
+template<>
+struct value_conversion_t<std::u8string> {    
+    std::u8string operator()(const std::string_view &v) const {
+        return {reinterpret_cast<const char8_t *>(v.data()), v.size()};
+    }
+};
+
+
 template<number_t T>
 struct value_conversion_t<T>{
     constexpr T operator()(std::nullptr_t) const {
