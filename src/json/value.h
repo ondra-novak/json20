@@ -832,7 +832,7 @@ constexpr void value_t::sort_object(Iter beg, Iter end) {
     std::sort(pbeg, pend,[&](const auto &a, const auto &b){
         return a.first().template as<std::string_view>() < b.first().template as<std::string_view>();
     });
-    std::for_each(pbeg, pbeg, [](auto &x){
+    std::for_each(pbeg, pend, [](auto &x){
         x.second().mark_has_key();
     });
 }
