@@ -5,6 +5,8 @@
 #include "number_string.h"
 #include "shared_array.h"
 #include "object_view.h"
+#include <string>
+#include <iterator>
 
 namespace JSON20_NAMESPACE_NAME {
 
@@ -983,6 +985,9 @@ struct value_conversion_t<std::string> {
 
 template<>
 struct value_conversion_t<std::u8string> {    
+    std::u8string operator()(std::nullptr_t) const {
+        return {};
+    }
     std::u8string operator()(const std::string_view &v) const {
         return {reinterpret_cast<const char8_t *>(v.data()), v.size()};
     }
