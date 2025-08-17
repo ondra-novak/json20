@@ -261,24 +261,35 @@ public:
      * copies the string into the object (uses small string buffer, or allocates the buffer)
      *
      */
-
+    
     constexpr value_t(std::string_view text) {
         if (std::is_constant_evaluated()) {
             std::construct_at(&_data, Data{string_view, 0,static_cast<std::uint32_t>(text.size()), {text.data()}});
         } else {
-            if (text.size() < 16) {
-                std::construct_at(&_str);
-                _str.size = static_cast<unsigned char>(text.size());
-                std::copy(text.begin(), text.end(), _str.str);
-            } else {
-                _data = {string,0, 0,{.shared_str = shared_array_t<char>::create(text.size(),[&](char *beg, char *){
-                    std::copy(text.begin(), text.end(), beg);
-                })}};
-            }
+            build_string_rt(text.data(), text.size());
         }
     }
 
+    ///Construct string
+    /**
+     * @param text text to construct
+     * @note constexpr version doesn't allocate the string. If you need this, you must allocate
+     * shared array bufer and construct it with pointer to that buffer. Non-constexpr version
+     * copies the string into the object (uses small string buffer, or allocates the buffer)
+     * 
+     * @note u8string is stored as string. It always expects UTF-8, the u8string is just supported for compatibility
+     */
+    constexpr value_t(std::u8string_view text) {
+        if (std::is_constant_evaluated()) {
+            std::construct_at(&_data, Data{string_view, 0,static_cast<std::uint32_t>(text.size()), {.u8str_view = text.data()}});
+        } else {
+            build_string_rt(reinterpret_cast<const char *>(text.data()), text.size());
+        }
+    }
+
+
     value_t(std::string text):value_t(std::string_view(text)) {}
+    value_t(std::u8string text):value_t(std::u8string_view(text)) {}
 
 
     ///Constructs number string
@@ -727,6 +738,8 @@ protected:
         union {
             ///pointer to statically allocated string
             const char *str_view;
+            ///pointer to statically allocated u8 string - just alias for constexpr
+            const char8_t *u8str_view;
             ///pointer to statically allocated binary string
             const unsigned char *bin_str_view;
             ///pointer to shared string buffer
@@ -822,7 +835,20 @@ protected:
             }
         }),is_object);
     }
+    
+    void build_string_rt(const char *text, std::size_t len) {
+            if (len < 16) {
+                std::construct_at(&_str);
+                _str.size = static_cast<unsigned char>(len);
+                std::copy(text, text+len, _str.str);
+            } else {
+                _data = {string,0, 0,{.shared_str = shared_array_t<char>::create(len,[&](char *beg, char *){
+                    std::copy(text, text+len, beg);
+                })}};
+            }
 
+    }
+    
 };
 
 
