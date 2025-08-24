@@ -1019,6 +1019,16 @@ struct value_conversion_t<std::u8string> {
     }
 };
 
+template<>
+struct value_conversion_t<std::u8string_view> {    
+    std::u8string_view operator()(std::nullptr_t) const {
+        return {};
+    }
+    std::u8string_view operator()(const std::string_view &v) const {
+        return {reinterpret_cast<const char8_t *>(v.data()), v.size()};
+    }
+};
+
 
 template<number_t T>
 struct value_conversion_t<T>{

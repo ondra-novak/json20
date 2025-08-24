@@ -115,6 +115,7 @@ public:
     template<optional_unsigned_integer_number_t T>
     constexpr T parse_uint() const;
     constexpr operator double() const;
+    constexpr operator float() const  {return static_cast<float>(this->operator double());}
     constexpr operator int() const;
     constexpr operator long() const;
     constexpr operator long long() const;
