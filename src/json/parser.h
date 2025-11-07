@@ -51,11 +51,11 @@ class parser_t {
 public:
 
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter parse(Iter iter, Iter end,  value &out);
 
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter parse_binary(Iter iter, Iter end, value &out);
 
 
@@ -64,7 +64,7 @@ protected:
     std::vector<value> _value_stack;
     std::vector<char> _str_buff;
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter eat_white(Iter iter, Iter end) {
         while (iter != end) {
             char c = *iter;
@@ -74,7 +74,7 @@ protected:
         throw parse_error_t(parse_error_t::unexpected_eof, iter);
     }
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter check_kw(Iter iter, Iter end, const std::string_view &chk) {
         auto chkb = chk.begin();
         auto chke = chk.end();
@@ -88,16 +88,16 @@ protected:
 
     }
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter parse_object(Iter iter, Iter end, value &out);
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter parse_array(Iter iter, Iter end, value &out);
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter parse_string(Iter iter, Iter end, value &out);
 
-    template<std::forward_iterator Iter>
+    template<std::input_iterator Iter>
     constexpr Iter parse_number(Iter iter, Iter end, value &out);
 
     static constexpr std::uint32_t build_bloom_mask(std::string_view chars) {
@@ -111,7 +111,7 @@ protected:
 
 
 
-template<std::forward_iterator Iter>
+template<std::input_iterator Iter>
 constexpr Iter parser_t::parse(Iter iter, Iter end,  value &out) {
     iter = eat_white(iter, end);
     char c = *iter;
@@ -143,7 +143,7 @@ constexpr Iter parser_t::parse(Iter iter, Iter end,  value &out) {
     }
 }
 
-template<std::forward_iterator Iter>
+template<std::input_iterator Iter>
 constexpr Iter parser_t::parse_string(Iter iter, Iter end, value &out) {
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     if (*iter == '"') {
@@ -258,7 +258,7 @@ constexpr Iter parser_t::parse_string(Iter iter, Iter end, value &out) {
 }
 
 
-template<std::forward_iterator Iter>
+template<std::input_iterator Iter>
 constexpr Iter parser_t::parse_number(Iter iter, Iter end, value &out) {
     constexpr auto srch_mask = build_bloom_mask("0123456789-+.Ee");
     constexpr auto is_digit = [](char c) {
@@ -311,7 +311,7 @@ constexpr Iter parser_t::parse_number(Iter iter, Iter end, value &out) {
 
 }
 
-template<std::forward_iterator Iter>
+template<std::input_iterator Iter>
 constexpr Iter parser_t::parse_array(Iter iter, Iter end, value &out) {
     iter = eat_white(iter, end);
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
@@ -344,7 +344,7 @@ constexpr Iter parser_t::parse_array(Iter iter, Iter end, value &out) {
     return iter;
 }
 
-template<std::forward_iterator Iter>
+template<std::input_iterator Iter>
 constexpr Iter parser_t::parse_object(Iter iter, Iter end, value &out) {
     iter = eat_white(iter, end);
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
@@ -396,7 +396,7 @@ constexpr value value::from_json(const std::string_view &text) {
     return out;
 }
 
-template<std::forward_iterator Iter>
+template<std::input_iterator Iter>
 constexpr Iter parser_t::parse_binary(Iter iter, Iter end, value &out) {
     if (iter == end) throw parse_error_t(parse_error_t::unexpected_eof, iter);
     char tagbyte = *iter;
