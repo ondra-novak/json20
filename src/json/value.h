@@ -287,9 +287,40 @@ public:
         }
     }
 
+    template<typename T>
+    requires(std::is_same_v<T, wchar_t> || std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>)
+    constexpr value_t(std::basic_string_view<T> text) {
+        // simple (portable) UTF-16/UTF-32 -> UTF-8 conversion
+        std::vector<char> out;
+        out.reserve(text.size() * 3 + 1);
+        for (auto wc: text) {
+            unsigned int cp = static_cast<unsigned int>(wc);
+            // encode cp to UTF-8
+            if (cp <= 0x7F) {
+                out.push_back(static_cast<char>(cp));
+            } else if (cp <= 0x7FF) {
+                out.push_back(static_cast<char>(0xC0 | ((cp >> 6) & 0x1F)));
+                out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+            } else if (cp <= 0xFFFF) {
+                out.push_back(static_cast<char>(0xE0 | ((cp >> 12) & 0x0F)));
+                out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+            } else {
+                out.push_back(static_cast<char>(0xF0 | ((cp >> 18) & 0x07)));
+                out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+                out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+                out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+            }
+        }
+        (*this) = value_t(std::string_view(out.begin(), out.end()));
+    }
+    
+    
+
 
     value_t(std::string text):value_t(std::string_view(text)) {}
     value_t(std::u8string text):value_t(std::u8string_view(text)) {}
+    value_t(std::wstring text):value_t(std::wstring_view(text)) {}
 
 
     ///Constructs number string
@@ -1016,6 +1047,90 @@ struct value_conversion_t<std::u8string> {
     }
     std::u8string operator()(const std::string_view &v) const {
         return {reinterpret_cast<const char8_t *>(v.data()), v.size()};
+    }
+};
+
+template<typename C>
+requires(std::is_same_v<C, char16_t> || std::is_same_v<C, char32_t> || std::is_same_v<C, wchar_t>  )
+struct value_conversion_t<std::basic_string<C> > {    
+    std::basic_string<C> operator()(std::nullptr_t) const {
+        return {};
+    }
+    std::basic_string<C> operator()(const std::string_view &v) const {
+        std::basic_string<C> out;
+        out.reserve(v.size());
+
+        const unsigned char *s = reinterpret_cast<const unsigned char*>(v.data());
+        std::size_t len = v.size();
+        std::size_t i = 0;
+
+        auto push_codepoint = [&](uint32_t cp) {
+            // replace invalid/surrogate with U+FFFD
+            if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) cp = 0xFFFD;
+            if constexpr (sizeof(C) == 2) {
+                if (cp <= 0xFFFF) {
+                    out.push_back(static_cast<C>(cp));
+                } else {
+                    cp -= 0x10000;
+                    C hi = static_cast<C>(0xD800u + (cp >> 10));
+                    C lo = static_cast<C>(0xDC00u + (cp & 0x3FFu));
+                    out.push_back(hi);
+                    out.push_back(lo);
+                }
+            } else { // sizeof(C) == 4
+                out.push_back(static_cast<C>(cp));
+            }
+        };
+
+        while (i < len) {
+            unsigned char c0 = s[i];
+            uint32_t cp = 0;
+            if (c0 < 0x80) {
+                cp = c0;
+                ++i;
+            } else if ((c0 & 0xE0) == 0xC0) {
+                if (i + 1 >= len) { cp = 0xFFFD; ++i; }
+                else {
+                    unsigned char c1 = s[i+1];
+                    if ((c1 & 0xC0) != 0x80) { cp = 0xFFFD; ++i; }
+                    else {
+                        cp = ((c0 & 0x1F) << 6) | (c1 & 0x3F);
+                        if (cp < 0x80) cp = 0xFFFD; // overlong
+                        i += 2;
+                    }
+                }
+            } else if ((c0 & 0xF0) == 0xE0) {
+                if (i + 2 >= len) { cp = 0xFFFD; ++i; }
+                else {
+                    unsigned char c1 = s[i+1], c2 = s[i+2];
+                    if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80) { cp = 0xFFFD; ++i; }
+                    else {
+                        cp = ((c0 & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+                        if (cp < 0x800) cp = 0xFFFD; // overlong
+                        i += 3;
+                    }
+                }
+            } else if ((c0 & 0xF8) == 0xF0) {
+                if (i + 3 >= len) { cp = 0xFFFD; ++i; }
+                else {
+                    unsigned char c1 = s[i+1], c2 = s[i+2], c3 = s[i+3];
+                    if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80 || (c3 & 0xC0) != 0x80) { cp = 0xFFFD; ++i; }
+                    else {
+                        cp = ((c0 & 0x07) << 18) | ((c1 & 0x3F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F);
+                        if (cp < 0x10000 || cp > 0x10FFFF) cp = 0xFFFD; // overlong or out of range
+                        i += 4;
+                    }
+                }
+            } else {
+                // invalid leading byte
+                cp = 0xFFFD;
+                ++i;
+            }
+
+            push_codepoint(cp);
+        }
+
+        return out;
     }
 };
 
